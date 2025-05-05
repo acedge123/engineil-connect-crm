@@ -119,17 +119,17 @@ const tasksData = [
 const notesData = [
   {
     id: 1,
-    content: 'John mentioned he'll be traveling to Europe for business in June. Good opportunity to schedule a meeting in London office.',
+    content: "John mentioned he'll be traveling to Europe for business in June. Good opportunity to schedule a meeting in London office.",
     createdAt: '2025-05-01T15:30:00',
   },
   {
     id: 2,
-    content: 'Prefers morning meetings, ideally before 11am PT. Doesn't like to discuss business over lunch.',
+    content: "Prefers morning meetings, ideally before 11am PT. Doesn't like to discuss business over lunch.",
     createdAt: '2025-04-15T11:45:00',
   },
   {
     id: 3,
-    content: 'Interested in AI and machine learning applications for his business. Mentioned looking for solutions to automate customer service.',
+    content: "Interested in AI and machine learning applications for his business. Mentioned looking for solutions to automate customer service.",
     createdAt: '2025-04-10T10:15:00',
   },
 ];
