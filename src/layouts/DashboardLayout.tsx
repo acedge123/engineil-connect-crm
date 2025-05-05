@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { 
@@ -68,7 +67,7 @@ const DashboardLayout: React.FC = () => {
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
             <Link to="/" className="flex items-center space-x-2">
-              <span className="text-xl font-bold text-crm-blue">EngineIL</span>
+              <span className="text-xl font-bold text-crm-blue">Engineil.ing</span>
               <span className="text-lg font-medium">Connect</span>
             </Link>
           </div>
