@@ -1,82 +1,133 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, Session } from '@supabase/supabase-js';
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
-// This is a placeholder until Supabase is connected
-// Once Supabase is integrated, we'll use the actual types and authentication methods
-type User = {
+type Profile = {
   id: string;
-  email: string;
   role: 'admin' | 'user';
-  name?: string;
-} | null;
+  full_name?: string;
+  avatar_url?: string;
+};
 
 type AuthContextType = {
-  user: User;
+  user: User | null;
+  profile: Profile | null;
   isLoading: boolean;
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// This is a mock implementation until Supabase is connected
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Mock initialization - replace with Supabase auth state
-    const storedUser = localStorage.getItem('crm-user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        console.error('Failed to parse stored user', error);
+  // Fetch profile data when user is available
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
       }
+
+      if (data) {
+        setProfile(data as Profile);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
     }
-    setIsLoading(false);
-    
-    // This will be replaced with Supabase auth subscription
+  };
+
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, newSession) => {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        
+        // Fetch profile data after setting user, but don't call Supabase inside the callback
+        if (newSession?.user) {
+          setTimeout(() => {
+            fetchProfile(newSession.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+        }
+      }
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      
+      if (currentSession?.user) {
+        fetchProfile(currentSession.user.id);
+      }
+    }).finally(() => {
+      setIsLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = profile?.role === 'admin';
 
   const signIn = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      // Mock sign in - replace with Supabase auth
-      if (email && password) {
-        // Mock admin user
-        if (email === 'admin@engineil.ing' && password === 'admin') {
-          const adminUser = {
-            id: '1',
-            email: 'admin@engineil.ing',
-            role: 'admin' as const,
-            name: 'Admin User'
-          };
-          setUser(adminUser);
-          localStorage.setItem('crm-user', JSON.stringify(adminUser));
-          toast.success('Successfully signed in as Admin');
-        } else {
-          // Mock regular user
-          const regularUser = {
-            id: '2',
-            email,
-            role: 'user' as const,
-            name: 'Regular User'
-          };
-          setUser(regularUser);
-          localStorage.setItem('crm-user', JSON.stringify(regularUser));
-          toast.success('Successfully signed in');
-        }
-      } else {
-        throw new Error('Email and password are required');
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) {
+        toast.error(`Sign in failed: ${error.message}`);
+        throw error;
       }
+      
+      toast.success('Successfully signed in');
     } catch (error) {
-      toast.error('Failed to sign in');
       console.error('Sign in error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const signUp = async (email: string, password: string, fullName: string) => {
+    try {
+      setIsLoading(true);
+      const { error } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          data: {
+            full_name: fullName
+          }
+        }
+      });
+      
+      if (error) {
+        toast.error(`Sign up failed: ${error.message}`);
+        throw error;
+      }
+      
+      toast.success('Successfully signed up! Please check your email for confirmation.');
+    } catch (error) {
+      console.error('Sign up error:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -85,12 +136,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      // Mock sign out - replace with Supabase auth
-      setUser(null);
-      localStorage.removeItem('crm-user');
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        toast.error(`Sign out failed: ${error.message}`);
+        throw error;
+      }
+      
       toast.info('Successfully signed out');
     } catch (error) {
-      toast.error('Failed to sign out');
       console.error('Sign out error:', error);
       throw error;
     }
@@ -98,9 +152,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = {
     user,
+    profile,
     isLoading,
     isAdmin,
     signIn,
+    signUp,
     signOut,
   };
 
