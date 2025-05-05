@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -97,7 +96,7 @@ const Login = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 flex items-center justify-center">
-            <span className="text-crm-blue">EngineIL</span>
+            <span className="text-crm-blue">Engineil.ing</span>
             <span className="ml-2">Connect CRM</span>
           </h1>
           <p className="text-gray-600 mt-2">Manage your business relationships efficiently</p>
@@ -260,8 +259,8 @@ const Login = () => {
         <div className="mt-6 text-center text-sm text-gray-600">
           <p>
             Test credentials for demo: <br />
-            Admin: admin@engineil.ing / admin <br />
-            User: user@engineil.ing / password
+            Admin: admin@engineil.ing / admin123 <br />
+            User: user@engineil.ing / password123
           </p>
         </div>
       </div>
