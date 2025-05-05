@@ -1,7 +1,7 @@
 
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   Button,
   Card,
   CardContent,
@@ -18,7 +18,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/';
+} from '@/components/ui';
 import { toast } from "sonner";
 import { useAuth } from '../contexts/AuthContext';
 import { 
