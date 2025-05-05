@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const DashboardLayout: React.FC = () => {
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
@@ -46,6 +46,14 @@ const DashboardLayout: React.FC = () => {
   if (isAdmin) {
     navItems.push({ to: '/admin', label: 'Admin', icon: <Settings className="w-5 h-5" /> });
   }
+
+  // Get display name from profile or fallback to email
+  const displayName = profile?.full_name || user?.email;
+  
+  // Get initial for avatar
+  const userInitial = profile?.full_name 
+    ? profile.full_name.charAt(0) 
+    : user?.email?.charAt(0) || 'U';
 
   return (
     <div className="min-h-screen bg-crm-background flex flex-col">
@@ -76,11 +84,11 @@ const DashboardLayout: React.FC = () => {
             
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 rounded-full bg-crm-indigo flex items-center justify-center text-white">
-                {user?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                {userInitial}
               </div>
               <div className="hidden md:block">
-                <div className="text-sm font-medium">{user?.name || user?.email}</div>
-                <div className="text-xs text-gray-500 capitalize">{user?.role}</div>
+                <div className="text-sm font-medium">{displayName}</div>
+                <div className="text-xs text-gray-500 capitalize">{profile?.role || 'user'}</div>
               </div>
             </div>
           </div>

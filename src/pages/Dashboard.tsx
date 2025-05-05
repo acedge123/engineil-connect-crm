@@ -66,8 +66,11 @@ const COLORS = ['#0EA5E9', '#8B5CF6', '#F97316', '#10B981', '#EF4444'];
 const TASK_COLORS = ['#10B981', '#F97316', '#EF4444'];
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
+  
+  // Get display name from profile or fallback to email
+  const displayName = profile?.full_name || user?.email;
 
   return (
     <div className="space-y-6 animate-enter">
@@ -75,7 +78,7 @@ const Dashboard = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {user?.name || user?.email}</p>
+          <p className="text-gray-600">Welcome back, {displayName}</p>
         </div>
         <div className="mt-4 sm:mt-0">
           <p className="text-gray-600 text-sm">
