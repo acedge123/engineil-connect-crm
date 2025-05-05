@@ -13,6 +13,11 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState<{
+    email?: string;
+    password?: string;
+    fullName?: string;
+  }>({});
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
 
@@ -21,10 +26,40 @@ const Login = () => {
     return <Navigate to="/" replace />;
   }
 
+  const validateForm = (type: 'signin' | 'signup'): boolean => {
+    const errors: {
+      email?: string;
+      password?: string;
+      fullName?: string;
+    } = {};
+    
+    // Validate email
+    if (!email) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    // Validate password
+    if (!password) {
+      errors.password = 'Password is required';
+    } else if (password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+    
+    // Validate full name (only for signup)
+    if (type === 'signup' && !fullName) {
+      errors.fullName = 'Full name is required';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    if (!validateForm('signin')) {
       return;
     }
     
@@ -42,7 +77,7 @@ const Login = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password || !fullName) {
+    if (!validateForm('signup')) {
       return;
     }
     
@@ -93,7 +128,11 @@ const Login = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                      className={formErrors.email ? "border-red-500" : ""}
                     />
+                    {formErrors.email && (
+                      <p className="text-xs text-red-500">{formErrors.email}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -109,7 +148,11 @@ const Login = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
+                      className={formErrors.password ? "border-red-500" : ""}
                     />
+                    {formErrors.password && (
+                      <p className="text-xs text-red-500">{formErrors.password}</p>
+                    )}
                   </div>
                 </CardContent>
                 <CardFooter>
@@ -152,7 +195,11 @@ const Login = () => {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       required
+                      className={formErrors.fullName ? "border-red-500" : ""}
                     />
+                    {formErrors.fullName && (
+                      <p className="text-xs text-red-500">{formErrors.fullName}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email-signup">Email</Label>
@@ -163,7 +210,11 @@ const Login = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                      className={formErrors.email ? "border-red-500" : ""}
                     />
+                    {formErrors.email && (
+                      <p className="text-xs text-red-500">{formErrors.email}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password-signup">Password</Label>
@@ -174,7 +225,11 @@ const Login = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
+                      className={formErrors.password ? "border-red-500" : ""}
                     />
+                    {formErrors.password && (
+                      <p className="text-xs text-red-500">{formErrors.password}</p>
+                    )}
                     <p className="text-xs text-gray-500">
                       Password must be at least 6 characters long
                     </p>
@@ -206,7 +261,7 @@ const Login = () => {
           <p>
             Test credentials for demo: <br />
             Admin: admin@engineil.ing / admin <br />
-            User: user@engineil.ing / any password
+            User: user@engineil.ing / password
           </p>
         </div>
       </div>

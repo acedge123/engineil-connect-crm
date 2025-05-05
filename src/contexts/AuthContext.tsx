@@ -91,6 +91,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setIsLoading(true);
+      
+      // Validate email format before submitting
+      if (!isValidEmail(email)) {
+        toast.error('Please enter a valid email address');
+        return;
+      }
+      
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       
       if (error) {
@@ -110,6 +117,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
       setIsLoading(true);
+      
+      // Validate email format before submitting
+      if (!isValidEmail(email)) {
+        toast.error('Please enter a valid email address');
+        return;
+      }
+      
       const { error } = await supabase.auth.signUp({ 
         email, 
         password,
@@ -148,6 +162,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Sign out error:', error);
       throw error;
     }
+  };
+  
+  // Simple email validation function
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
 
   const value = {
