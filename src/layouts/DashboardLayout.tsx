@@ -70,8 +70,12 @@ const DashboardLayout: React.FC = () => {
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
             <Link to="/" className="flex items-center space-x-2">
-              <span className="text-xl font-bold text-crm-blue">Engineil.ing</span>
-              <span className="text-lg font-medium">Connect</span>
+              <img 
+                src="/lovable-uploads/6d5eeec5-0819-497e-b72d-58213b65a5d5.png" 
+                alt="The Gig Agency Logo" 
+                className="h-8 w-auto"
+              />
+              <span className="text-lg font-medium">Dashboard</span>
             </Link>
           </div>
           

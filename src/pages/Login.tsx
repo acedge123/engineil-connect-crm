@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -95,9 +96,15 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center justify-center">
-            <span className="text-crm-blue">Engineil.ing</span>
-            <span className="ml-2">Connect CRM</span>
+          <div className="flex items-center justify-center mb-4">
+            <img 
+              src="/lovable-uploads/6d5eeec5-0819-497e-b72d-58213b65a5d5.png" 
+              alt="The Gig Agency Logo" 
+              className="h-16 w-auto"
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            The Gig Agency Connected Dashboard
           </h1>
           <p className="text-gray-600 mt-2">Manage your business relationships efficiently</p>
         </div>
@@ -266,6 +273,72 @@ const Login = () => {
       </div>
     </div>
   );
+
+  const validateForm = (type: 'signin' | 'signup'): boolean => {
+    const errors: {
+      email?: string;
+      password?: string;
+      fullName?: string;
+    } = {};
+    
+    // Validate email
+    if (!email) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    // Validate password
+    if (!password) {
+      errors.password = 'Password is required';
+    } else if (password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+    
+    // Validate full name (only for signup)
+    if (type === 'signup' && !fullName) {
+      errors.fullName = 'Full name is required';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm('signin')) {
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      await signIn(email, password);
+      navigate('/');
+    } catch (error) {
+      console.error('Login error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm('signup')) {
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      await signUp(email, password, fullName);
+      // Don't navigate after signup as the user might need to verify their email
+    } catch (error) {
+      console.error('Signup error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 };
 
 export default Login;
