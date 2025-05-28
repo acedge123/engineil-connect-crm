@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateRangePicker } from '@/components/DateRangePicker';
+import { DateRangePickerWithPresets } from '@/components/DateRangePickerWithPresets';
 import { toast } from 'sonner';
 
 type ShopifyClient = {
@@ -134,7 +134,7 @@ const ShopifyReports = () => {
             
             <div>
               <label className="block text-sm font-medium mb-2">Date Range</label>
-              <DateRangePicker
+              <DateRangePickerWithPresets
                 date={dateRange}
                 onDateChange={setDateRange}
               />
