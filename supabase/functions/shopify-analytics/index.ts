@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -18,9 +19,12 @@ serve(async (req) => {
     console.log('Fetching analytics for:', shopify_url);
     console.log('Date range:', date_from, 'to', date_to);
     
-    // Use the new access token you provided
-    const accessToken = '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';
-    console.log('Using provided access token (first 10 chars):', accessToken.substring(0, 10) + '...');
+    // Use the access token from Supabase secrets
+    const accessToken = Deno.env.get('SHOPIFY_ACCESS_TOKEN');
+    if (!accessToken) {
+      throw new Error('SHOPIFY_ACCESS_TOKEN secret not configured');
+    }
+    console.log('Using access token from secrets (first 10 chars):', accessToken.substring(0, 10) + '...');
 
     if (!shopify_url) {
       throw new Error('Missing shopify_url');
