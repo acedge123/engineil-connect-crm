@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +18,7 @@ import People from "./pages/People";
 import PersonDetail from "./pages/PersonDetail";
 import Tasks from "./pages/Tasks";
 import Shopify from "./pages/Shopify";
+import ShopifyReports from "./pages/ShopifyReports";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
@@ -41,6 +43,7 @@ const App = () => (
               <Route path="/people/:id" element={<PersonDetail />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/shopify" element={<Shopify />} />
+              <Route path="/shopify-reports" element={<ShopifyReports />} />
               <Route path="/admin" element={<AdminPanel />} />
             </Route>
             

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { 
@@ -11,7 +12,8 @@ import {
   X,
   Building,
   Bell,
-  ShoppingBag
+  ShoppingBag,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -42,6 +44,7 @@ const DashboardLayout: React.FC = () => {
     { to: '/people', label: 'People', icon: <Users className="w-5 h-5" /> },
     { to: '/tasks', label: 'Tasks', icon: <ListTodo className="w-5 h-5" /> },
     { to: '/shopify', label: 'Shopify Clients', icon: <ShoppingBag className="w-5 h-5" /> },
+    { to: '/shopify-reports', label: 'Shopify Reports', icon: <BarChart3 className="w-5 h-5" /> },
   ];
 
   if (isAdmin) {
@@ -51,7 +54,6 @@ const DashboardLayout: React.FC = () => {
   // Get display name from profile or fallback to email
   const displayName = profile?.full_name || user?.email;
   
-  // Get initial for avatar
   const userInitial = profile?.full_name 
     ? profile.full_name.charAt(0) 
     : user?.email?.charAt(0) || 'U';
