@@ -9,6 +9,111 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      influencer_spending_analysis: {
+        Row: {
+          analysis_date: string
+          average_order_value: number | null
+          created_at: string
+          customer_email: string
+          customer_name: string | null
+          first_order_date: string | null
+          id: string
+          influencer_id: string | null
+          last_order_date: string | null
+          order_count: number | null
+          shopify_client_id: string | null
+          total_spent: number | null
+          user_id: string
+        }
+        Insert: {
+          analysis_date?: string
+          average_order_value?: number | null
+          created_at?: string
+          customer_email: string
+          customer_name?: string | null
+          first_order_date?: string | null
+          id?: string
+          influencer_id?: string | null
+          last_order_date?: string | null
+          order_count?: number | null
+          shopify_client_id?: string | null
+          total_spent?: number | null
+          user_id: string
+        }
+        Update: {
+          analysis_date?: string
+          average_order_value?: number | null
+          created_at?: string
+          customer_email?: string
+          customer_name?: string | null
+          first_order_date?: string | null
+          id?: string
+          influencer_id?: string | null
+          last_order_date?: string | null
+          order_count?: number | null
+          shopify_client_id?: string | null
+          total_spent?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "influencer_spending_analysis_influencer_id_fkey"
+            columns: ["influencer_id"]
+            isOneToOne: false
+            referencedRelation: "influencers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influencer_spending_analysis_shopify_client_id_fkey"
+            columns: ["shopify_client_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      influencers: {
+        Row: {
+          category: string | null
+          created_at: string
+          email: string
+          engagement_rate: number | null
+          follower_count: number | null
+          id: string
+          instagram_handle: string | null
+          name: string | null
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          email: string
+          engagement_rate?: number | null
+          follower_count?: number | null
+          id?: string
+          instagram_handle?: string | null
+          name?: string | null
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          email?: string
+          engagement_rate?: number | null
+          follower_count?: number | null
+          id?: string
+          instagram_handle?: string | null
+          name?: string | null
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

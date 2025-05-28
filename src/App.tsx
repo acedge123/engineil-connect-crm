@@ -19,6 +19,7 @@ import PersonDetail from "./pages/PersonDetail";
 import Tasks from "./pages/Tasks";
 import Shopify from "./pages/Shopify";
 import ShopifyReports from "./pages/ShopifyReports";
+import Influencers from "./pages/Influencers";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
@@ -44,6 +45,7 @@ const App = () => (
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/shopify" element={<Shopify />} />
               <Route path="/shopify-reports" element={<ShopifyReports />} />
+              <Route path="/influencers" element={<Influencers />} />
               <Route path="/admin" element={<AdminPanel />} />
             </Route>
             
