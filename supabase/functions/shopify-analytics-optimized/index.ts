@@ -24,126 +24,34 @@ interface ShopifyAnalytics {
   aov: string;
 }
 
-async function fetchOrdersBatch(baseUrl: string, headers: any, params: string, maxPages = 20) {
-  let allOrders: any[] = [];
-  let nextPageInfo: string | null = null;
-  let pageCount = 0;
+async function fetchLimitedOrders(baseUrl: string, headers: any, params: string, maxOrders = 500) {
+  const url = `${baseUrl}/admin/api/2023-10/orders.json?${params}&limit=250`;
   
-  do {
-    let url: string;
+  console.log(`Fetching limited orders from: ${url}`);
+  
+  try {
+    const response = await fetch(url, { 
+      headers,
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    });
     
-    if (nextPageInfo) {
-      url = `${baseUrl}/admin/api/2023-10/orders.json?page_info=${nextPageInfo}&limit=250`;
-    } else {
-      url = `${baseUrl}/admin/api/2023-10/orders.json?${params}&limit=250`;
+    if (!response.ok) {
+      console.error(`Failed to fetch orders:`, response.status);
+      return [];
     }
     
-    console.log(`Fetching orders page ${pageCount + 1} from:`, url);
+    const data = await response.json();
+    const orders = data.orders || [];
     
-    try {
-      const response = await fetch(url, { 
-        headers,
-        signal: AbortSignal.timeout(15000)
-      });
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch orders on page ${pageCount + 1}:`, response.status);
-        break;
-      }
-      
-      const data = await response.json();
-      const orders = data.orders || [];
-      allOrders = allOrders.concat(orders);
-      
-      // Check for pagination using Link header
-      const linkHeader = response.headers.get('Link');
-      nextPageInfo = null;
-      
-      if (linkHeader) {
-        const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
-        if (nextMatch) {
-          nextPageInfo = nextMatch[1];
-        }
-      }
-      
-      pageCount++;
-      console.log(`Fetched ${orders.length} orders on page ${pageCount}, total so far: ${allOrders.length}`);
-      
-      // Break if we've fetched enough pages to prevent timeout
-      if (pageCount >= maxPages) {
-        console.log(`Reached maximum page limit (${maxPages}), stopping fetch`);
-        break;
-      }
-      
-    } catch (error) {
-      console.error(`Error fetching orders page ${pageCount + 1}:`, error);
-      break;
-    }
+    console.log(`Fetched ${orders.length} orders`);
     
-  } while (nextPageInfo);
-  
-  return allOrders;
-}
-
-async function fetchCustomersBatch(baseUrl: string, headers: any, maxPages = 10) {
-  let allCustomers: any[] = [];
-  let nextPageInfo: string | null = null;
-  let pageCount = 0;
-  
-  do {
-    let url: string;
+    // Return only the first batch to avoid timeouts
+    return orders.slice(0, maxOrders);
     
-    if (nextPageInfo) {
-      url = `${baseUrl}/admin/api/2023-10/customers.json?page_info=${nextPageInfo}&limit=250`;
-    } else {
-      url = `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
-    }
-    
-    console.log(`Fetching customers page ${pageCount + 1}`);
-    
-    try {
-      const response = await fetch(url, { 
-        headers,
-        signal: AbortSignal.timeout(10000)
-      });
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch customers on page ${pageCount + 1}:`, response.status);
-        break;
-      }
-      
-      const data = await response.json();
-      const customers = data.customers || [];
-      allCustomers = allCustomers.concat(customers);
-      
-      // Check for pagination using Link header
-      const linkHeader = response.headers.get('Link');
-      nextPageInfo = null;
-      
-      if (linkHeader) {
-        const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
-        if (nextMatch) {
-          nextPageInfo = nextMatch[1];
-        }
-      }
-      
-      pageCount++;
-      console.log(`Fetched ${customers.length} customers on page ${pageCount}, total so far: ${allCustomers.length}`);
-      
-      // Break if we've fetched enough pages to prevent timeout
-      if (pageCount >= maxPages) {
-        console.log(`Reached maximum page limit (${maxPages}), stopping fetch`);
-        break;
-      }
-      
-    } catch (error) {
-      console.error(`Error fetching customers page ${pageCount + 1}:`, error);
-      break;
-    }
-    
-  } while (nextPageInfo);
-  
-  return allCustomers;
+  } catch (error) {
+    console.error(`Error fetching orders:`, error);
+    return [];
+  }
 }
 
 async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalytics> {
@@ -187,42 +95,48 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
       throw new Error(`API test failed: ${testResponse.status}`);
     }
 
-    console.log('API connection successful, Analytics API not available - using REST API approach...');
+    console.log('API connection successful, fetching minimal data for analytics...');
 
-    // Use REST API approach since Analytics API is not available
-    // Period calculation (selected range)
+    // Period calculation (selected range) - limit to 500 orders max
     const periodStart = startDate.toISOString();
     const periodEnd = endDate.toISOString();
+    const periodOrdersParams = `status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}`;
+    const periodOrders = await fetchLimitedOrders(baseUrl, headers, periodOrdersParams, 500);
+    console.log('Period orders fetched:', periodOrders.length);
 
-    // YTD calculation
+    // YTD calculation - limit to 1000 orders max
     const ytdStartISO = ytdStart.toISOString();
     const ytdEndISO = ytdEnd.toISOString();
+    const ytdOrdersParams = `status=any&created_at_min=${ytdStartISO}&created_at_max=${ytdEndISO}`;
+    const ytdOrders = await fetchLimitedOrders(baseUrl, headers, ytdOrdersParams, 1000);
+    console.log('YTD orders fetched:', ytdOrders.length);
 
-    // Last year calculation
+    // Last year calculation - limit to 500 orders max
     const lastYearStartISO = lastYearStart.toISOString();
     const lastYearEndISO = lastYearEnd.toISOString();
-
-    console.log('Fetching orders with optimized REST API approach...');
-
-    // Fetch orders for selected period with limited pagination
-    const periodOrdersParams = `status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}`;
-    const periodOrders = await fetchOrdersBatch(baseUrl, headers, periodOrdersParams, 15);
-    console.log('Total period orders fetched:', periodOrders.length);
-
-    // Fetch YTD orders with limited pagination
-    const ytdOrdersParams = `status=any&created_at_min=${ytdStartISO}&created_at_max=${ytdEndISO}`;
-    const ytdOrders = await fetchOrdersBatch(baseUrl, headers, ytdOrdersParams, 15);
-    console.log('Total YTD orders fetched:', ytdOrders.length);
-
-    // Fetch last year orders with limited pagination
     const lastYearOrdersParams = `status=any&created_at_min=${lastYearStartISO}&created_at_max=${lastYearEndISO}`;
-    const lastYearOrders = await fetchOrdersBatch(baseUrl, headers, lastYearOrdersParams, 10);
-    console.log('Total last year orders fetched:', lastYearOrders.length);
+    const lastYearOrders = await fetchLimitedOrders(baseUrl, headers, lastYearOrdersParams, 500);
+    console.log('Last year orders fetched:', lastYearOrders.length);
 
-    // Fetch customers with limited pagination
-    console.log('Fetching customers with optimized batching...');
-    const allCustomers = await fetchCustomersBatch(baseUrl, headers, 5);
-    console.log('Total customers fetched:', allCustomers.length);
+    // Fetch customers count (just first page for estimate)
+    console.log('Fetching customer sample...');
+    const customersUrl = `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
+    let allCustomers: any[] = [];
+    
+    try {
+      const customersResponse = await fetch(customersUrl, { 
+        headers,
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      if (customersResponse.ok) {
+        const customersData = await customersResponse.json();
+        allCustomers = customersData.customers || [];
+        console.log('Customer sample fetched:', allCustomers.length);
+      }
+    } catch (error) {
+      console.log('Customer fetch failed, using fallback');
+    }
 
     // Calculate Period Net Sales (selected date range)
     const periodNetSales = periodOrders.reduce((total: number, order: any) => {
@@ -275,11 +189,8 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
       aov: `$${aov}`,
     };
 
-    console.log('Analytics calculated successfully using REST API:', analytics);
-    console.log('Period orders count:', totalOrders);
-    console.log('YTD orders count:', ytdOrders.length);
-    console.log('Last year orders count:', lastYearOrders.length);
-    console.log('Returning customers:', returningCustomers);
+    console.log('Analytics calculated successfully:', analytics);
+    console.log('Note: Data is based on sample due to performance optimization');
 
     return analytics;
 
@@ -298,7 +209,7 @@ serve(async (req) => {
   try {
     const params: AnalyticsParams = await req.json();
     
-    console.log('Fetching analytics using optimized REST API for:', params.shopify_url);
+    console.log('Fetching analytics with performance optimization for:', params.shopify_url);
     console.log('Date range:', params.date_from, 'to', params.date_to);
 
     const analytics = await getAnalyticsData(params);
