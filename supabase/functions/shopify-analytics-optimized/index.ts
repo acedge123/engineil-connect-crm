@@ -57,7 +57,7 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
       'Content-Type': 'application/json',
     };
 
-    // Test API connection
+    // Test API connection first with a smaller request
     const testUrl = `${baseUrl}/admin/api/2023-10/orders.json?limit=1&status=any`;
     const testResponse = await fetch(testUrl, { headers });
     
@@ -65,15 +65,28 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
       throw new Error(`API test failed: ${testResponse.status}`);
     }
 
-    console.log('API connection successful, fetching comprehensive analytics...');
+    console.log('API connection successful, fetching optimized analytics...');
 
-    // Fetch orders count and basic data for each period with higher limits for accuracy
-    const [periodData, ytdData, lastYearData, customerData] = await Promise.all([
-      fetchOrdersSummary(baseUrl, headers, startDate, endDate, 'period', 15), // Increased page limit
-      fetchOrdersSummary(baseUrl, headers, ytdStart, ytdEnd, 'ytd', 15),
-      fetchOrdersSummary(baseUrl, headers, lastYearStart, lastYearEnd, 'lastYear', 10),
-      fetchCustomersSummary(baseUrl, headers, 5)
+    // Use Promise.allSettled to handle potential timeouts gracefully
+    // Reduce page limits to prevent CPU timeout
+    const [periodResult, ytdResult, lastYearResult, customerResult] = await Promise.allSettled([
+      fetchOrdersSummary(baseUrl, headers, startDate, endDate, 'period', 8), // Reduced from 15
+      fetchOrdersSummary(baseUrl, headers, ytdStart, ytdEnd, 'ytd', 8), // Reduced from 15
+      fetchOrdersSummary(baseUrl, headers, lastYearStart, lastYearEnd, 'lastYear', 5), // Reduced from 10
+      fetchCustomersSummary(baseUrl, headers, 3) // Reduced from 5
     ]);
+
+    // Handle results and extract data safely
+    const periodData = periodResult.status === 'fulfilled' ? periodResult.value : { totalSales: 0, orderCount: 0 };
+    const ytdData = ytdResult.status === 'fulfilled' ? ytdResult.value : { totalSales: 0, orderCount: 0 };
+    const lastYearData = lastYearResult.status === 'fulfilled' ? lastYearResult.value : { totalSales: 0, orderCount: 0 };
+    const customerData = customerResult.status === 'fulfilled' ? customerResult.value : { totalCustomers: 0, returningCustomers: 0 };
+
+    // Log any failures
+    if (periodResult.status === 'rejected') console.error('Period data fetch failed:', periodResult.reason);
+    if (ytdResult.status === 'rejected') console.error('YTD data fetch failed:', ytdResult.reason);
+    if (lastYearResult.status === 'rejected') console.error('Last year data fetch failed:', lastYearResult.reason);
+    if (customerResult.status === 'rejected') console.error('Customer data fetch failed:', customerResult.reason);
 
     // Calculate metrics
     const periodNetSales = periodData.totalSales;
@@ -110,7 +123,8 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
     };
 
     console.log('Analytics calculated successfully:', analytics);
-    console.log(`Period data: ${periodData.orderCount} orders, $${periodNetSales.toFixed(2)} total sales`);
+    console.log(`Period: ${periodData.orderCount} orders, $${periodNetSales.toFixed(2)}`);
+    console.log(`YTD: ${ytdData.orderCount} orders, $${ytdNetSales.toFixed(2)}`);
     return analytics;
 
   } catch (error) {
@@ -119,7 +133,7 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
   }
 }
 
-async function fetchOrdersSummary(baseUrl: string, headers: any, startDate: Date, endDate: Date, period: string, maxPages: number = 15) {
+async function fetchOrdersSummary(baseUrl: string, headers: any, startDate: Date, endDate: Date, period: string, maxPages: number = 8) {
   const params = `status=any&created_at_min=${startDate.toISOString()}&created_at_max=${endDate.toISOString()}&limit=250`;
   let totalSales = 0;
   let orderCount = 0;
@@ -129,57 +143,66 @@ async function fetchOrdersSummary(baseUrl: string, headers: any, startDate: Date
 
   console.log(`Fetching ${period} orders summary (up to ${maxPages} pages)...`);
 
-  while (hasNextPage && pageCount < maxPages) {
-    const url = pageInfo 
-      ? `${baseUrl}/admin/api/2023-10/orders.json?page_info=${pageInfo}&limit=250`
-      : `${baseUrl}/admin/api/2023-10/orders.json?${params}`;
+  try {
+    while (hasNextPage && pageCount < maxPages) {
+      const url = pageInfo 
+        ? `${baseUrl}/admin/api/2023-10/orders.json?page_info=${pageInfo}&limit=250`
+        : `${baseUrl}/admin/api/2023-10/orders.json?${params}`;
 
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-      console.error(`Failed to fetch ${period} orders:`, response.status);
-      break;
-    }
+      const response = await fetch(url, { 
+        headers,
+        signal: AbortSignal.timeout(15000) // 15 second timeout per request
+      });
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch ${period} orders:`, response.status);
+        break;
+      }
 
-    const data = await response.json();
-    const orders = data.orders || [];
+      const data = await response.json();
+      const orders = data.orders || [];
 
-    // Calculate totals
-    for (const order of orders) {
-      totalSales += parseFloat(order.total_price || '0');
-      orderCount++;
-    }
+      // Calculate totals
+      for (const order of orders) {
+        totalSales += parseFloat(order.total_price || '0');
+        orderCount++;
+      }
 
-    // Check for pagination
-    const linkHeader = response.headers.get('Link');
-    hasNextPage = false;
-    
-    if (linkHeader) {
-      const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
-      if (nextMatch) {
-        pageInfo = nextMatch[1];
-        hasNextPage = true;
+      // Check for pagination
+      const linkHeader = response.headers.get('Link');
+      hasNextPage = false;
+      
+      if (linkHeader) {
+        const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
+        if (nextMatch) {
+          pageInfo = nextMatch[1];
+          hasNextPage = true;
+        }
+      }
+
+      pageCount++;
+      console.log(`${period}: Page ${pageCount}, fetched ${orders.length} orders, total: ${orderCount}, sales: $${totalSales.toFixed(2)}`);
+
+      // If we got less than 250 orders, we've reached the end
+      if (orders.length < 250) {
+        console.log(`${period}: Reached end of orders (page returned ${orders.length} orders)`);
+        break;
       }
     }
 
-    pageCount++;
-    console.log(`${period}: Fetched ${orders.length} orders on page ${pageCount}, total: ${orderCount}, sales: $${totalSales.toFixed(2)}`);
-
-    // If we got less than 250 orders, we've reached the end
-    if (orders.length < 250) {
-      console.log(`${period}: Reached end of orders (page returned ${orders.length} orders)`);
-      break;
+    if (pageCount >= maxPages) {
+      console.log(`${period}: Reached page limit (${maxPages}), data may be incomplete`);
     }
-  }
 
-  if (pageCount >= maxPages) {
-    console.log(`${period}: Reached maximum page limit (${maxPages}), may have incomplete data`);
+  } catch (error) {
+    console.error(`Error fetching ${period} orders:`, error);
+    // Return partial data instead of failing completely
   }
 
   return { totalSales, orderCount };
 }
 
-async function fetchCustomersSummary(baseUrl: string, headers: any, maxPages: number = 5) {
+async function fetchCustomersSummary(baseUrl: string, headers: any, maxPages: number = 3) {
   let totalCustomers = 0;
   let returningCustomers = 0;
   let hasNextPage = true;
@@ -188,47 +211,54 @@ async function fetchCustomersSummary(baseUrl: string, headers: any, maxPages: nu
 
   console.log(`Fetching customers summary (up to ${maxPages} pages)...`);
 
-  while (hasNextPage && pageCount < maxPages) {
-    const url = pageInfo 
-      ? `${baseUrl}/admin/api/2023-10/customers.json?page_info=${pageInfo}&limit=250`
-      : `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
+  try {
+    while (hasNextPage && pageCount < maxPages) {
+      const url = pageInfo 
+        ? `${baseUrl}/admin/api/2023-10/customers.json?page_info=${pageInfo}&limit=250`
+        : `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
 
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-      console.error('Failed to fetch customers:', response.status);
-      break;
-    }
+      const response = await fetch(url, { 
+        headers,
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to fetch customers:', response.status);
+        break;
+      }
 
-    const data = await response.json();
-    const customers = data.customers || [];
+      const data = await response.json();
+      const customers = data.customers || [];
 
-    for (const customer of customers) {
-      totalCustomers++;
-      if (customer.orders_count > 1) {
-        returningCustomers++;
+      for (const customer of customers) {
+        totalCustomers++;
+        if (customer.orders_count > 1) {
+          returningCustomers++;
+        }
+      }
+
+      // Check for pagination
+      const linkHeader = response.headers.get('Link');
+      hasNextPage = false;
+      
+      if (linkHeader) {
+        const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
+        if (nextMatch) {
+          pageInfo = nextMatch[1];
+          hasNextPage = true;
+        }
+      }
+
+      pageCount++;
+      console.log(`Customers: Page ${pageCount}, fetched ${customers.length}, total: ${totalCustomers}, returning: ${returningCustomers}`);
+
+      // If we got less than 250 customers, we've reached the end
+      if (customers.length < 250) {
+        break;
       }
     }
-
-    // Check for pagination
-    const linkHeader = response.headers.get('Link');
-    hasNextPage = false;
-    
-    if (linkHeader) {
-      const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
-      if (nextMatch) {
-        pageInfo = nextMatch[1];
-        hasNextPage = true;
-      }
-    }
-
-    pageCount++;
-    console.log(`Customers: Fetched ${customers.length} on page ${pageCount}, total: ${totalCustomers}, returning: ${returningCustomers}`);
-
-    // If we got less than 250 customers, we've reached the end
-    if (customers.length < 250) {
-      break;
-    }
+  } catch (error) {
+    console.error('Error fetching customers:', error);
   }
 
   return { totalCustomers, returningCustomers };
@@ -243,7 +273,7 @@ serve(async (req) => {
   try {
     const params: AnalyticsParams = await req.json();
     
-    console.log('Fetching comprehensive analytics for:', params.shopify_url);
+    console.log('Fetching optimized analytics for:', params.shopify_url);
     console.log('Date range:', params.date_from, 'to', params.date_to);
 
     const analytics = await getAnalyticsData(params);
@@ -257,7 +287,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        details: 'Failed to fetch optimized Shopify analytics data. Please check your Shopify store URL and admin API key.'
+        details: 'Failed to fetch optimized Shopify analytics data. The function may have timed out due to large data volume.'
       }), 
       {
         status: 500,
