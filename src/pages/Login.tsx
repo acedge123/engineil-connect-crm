@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,12 +13,13 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<{
     email?: string;
     password?: string;
     fullName?: string;
   }>({});
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, resetPassword, user } = useAuth();
   const navigate = useNavigate();
 
   // If already logged in, redirect to dashboard
@@ -65,7 +67,6 @@ const Login = () => {
     try {
       setIsSubmitting(true);
       await signIn(email, password);
-      navigate('/');
     } catch (error) {
       console.error('Login error:', error);
     } finally {
@@ -83,13 +84,90 @@ const Login = () => {
     try {
       setIsSubmitting(true);
       await signUp(email, password, fullName);
-      // Don't navigate after signup as the user might need to verify their email
     } catch (error) {
       console.error('Signup error:', error);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email) {
+      setFormErrors({ email: 'Email is required for password reset' });
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      await resetPassword(email);
+      setShowResetPassword(false);
+    } catch (error) {
+      console.error('Reset password error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (showResetPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center mb-4">
+              <img 
+                src="/lovable-uploads/6d5eeec5-0819-497e-b72d-58213b65a5d5.png" 
+                alt="The Gig Agency Logo" 
+                className="h-16 w-auto"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Reset Password</h1>
+            <p className="text-gray-600 mt-2">Enter your email to receive a password reset link</p>
+          </div>
+          
+          <Card className="w-full">
+            <form onSubmit={handleResetPassword}>
+              <CardContent className="space-y-4 pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className={formErrors.email ? "border-red-500" : ""}
+                  />
+                  {formErrors.email && (
+                    <p className="text-xs text-red-500">{formErrors.email}</p>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col space-y-2">
+                <Button 
+                  type="submit" 
+                  className="w-full bg-crm-blue hover:bg-blue-600"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Sending...' : 'Send Reset Email'}
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => setShowResetPassword(false)}
+                >
+                  Back to Sign In
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -142,9 +220,13 @@ const Login = () => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="password-signin">Password</Label>
-                      <a href="#" className="text-xs text-blue-600 hover:text-blue-800">
+                      <button 
+                        type="button"
+                        onClick={() => setShowResetPassword(true)}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
                         Forgot password?
-                      </a>
+                      </button>
                     </div>
                     <Input
                       id="password-signin"
