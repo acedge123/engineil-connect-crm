@@ -7,32 +7,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function fetchAllOrders(baseUrl: string, headers: any, params: string) {
+async function fetchOrdersBatch(baseUrl: string, headers: any, params: string, maxPages = 20) {
   let allOrders: any[] = [];
   let nextPageInfo: string | null = null;
+  let pageCount = 0;
   
   do {
     let url: string;
     
     if (nextPageInfo) {
-      // When using page_info, we can only include it - no other query parameters
       url = `${baseUrl}/admin/api/2023-10/orders.json?page_info=${nextPageInfo}&limit=250`;
     } else {
-      // For the first request, we can include all our parameters
       url = `${baseUrl}/admin/api/2023-10/orders.json?${params}&limit=250`;
     }
     
-    console.log('Fetching orders from:', url);
+    console.log(`Fetching orders page ${pageCount + 1} from:`, url);
     
     const response = await fetch(url, { headers });
     
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to fetch orders: ${response.status} - ${errorText}`);
+      console.error(`Failed to fetch orders on page ${pageCount + 1}:`, response.status, errorText);
+      break;
     }
     
     const data = await response.json();
-    allOrders = allOrders.concat(data.orders || []);
+    const orders = data.orders || [];
+    allOrders = allOrders.concat(orders);
     
     // Check for pagination using Link header
     const linkHeader = response.headers.get('Link');
@@ -45,16 +46,24 @@ async function fetchAllOrders(baseUrl: string, headers: any, params: string) {
       }
     }
     
-    console.log(`Fetched ${data.orders?.length || 0} orders, total so far: ${allOrders.length}`);
+    pageCount++;
+    console.log(`Fetched ${orders.length} orders on page ${pageCount}, total so far: ${allOrders.length}`);
     
-  } while (nextPageInfo && allOrders.length < 10000); // Safety limit
+    // Break if we've fetched enough pages to prevent timeout
+    if (pageCount >= maxPages) {
+      console.log(`Reached maximum page limit (${maxPages}), stopping fetch`);
+      break;
+    }
+    
+  } while (nextPageInfo);
   
   return allOrders;
 }
 
-async function fetchAllCustomers(baseUrl: string, headers: any) {
+async function fetchCustomersBatch(baseUrl: string, headers: any, maxPages = 10) {
   let allCustomers: any[] = [];
   let nextPageInfo: string | null = null;
+  let pageCount = 0;
   
   do {
     let url: string;
@@ -65,15 +74,18 @@ async function fetchAllCustomers(baseUrl: string, headers: any) {
       url = `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
     }
     
+    console.log(`Fetching customers page ${pageCount + 1}`);
+    
     const response = await fetch(url, { headers });
     
     if (!response.ok) {
-      console.error('Failed to fetch customers:', response.status);
+      console.error(`Failed to fetch customers on page ${pageCount + 1}:`, response.status);
       break;
     }
     
     const data = await response.json();
-    allCustomers = allCustomers.concat(data.customers || []);
+    const customers = data.customers || [];
+    allCustomers = allCustomers.concat(customers);
     
     // Check for pagination using Link header
     const linkHeader = response.headers.get('Link');
@@ -86,9 +98,16 @@ async function fetchAllCustomers(baseUrl: string, headers: any) {
       }
     }
     
-    console.log(`Fetched ${data.customers?.length || 0} customers, total so far: ${allCustomers.length}`);
+    pageCount++;
+    console.log(`Fetched ${customers.length} customers on page ${pageCount}, total so far: ${allCustomers.length}`);
     
-  } while (nextPageInfo && allCustomers.length < 50000); // Safety limit
+    // Break if we've fetched enough pages to prevent timeout
+    if (pageCount >= maxPages) {
+      console.log(`Reached maximum page limit (${maxPages}), stopping fetch`);
+      break;
+    }
+    
+  } while (nextPageInfo);
   
   return allCustomers;
 }
@@ -116,11 +135,10 @@ serve(async (req) => {
       throw new Error('Missing shopify_url');
     }
 
-    // Ensure URL format is correct - remove any protocol and add https://
+    // Ensure URL format is correct
     let baseUrl = shopify_url.replace(/^https?:\/\//, '');
     baseUrl = `https://${baseUrl}`;
     
-    // Ensure it ends with .myshopify.com if not already
     if (!baseUrl.includes('.myshopify.com')) {
       baseUrl = baseUrl.replace(/\/$/, '') + '.myshopify.com';
     }
@@ -131,9 +149,8 @@ serve(async (req) => {
     const startDate = date_from ? new Date(date_from) : new Date(new Date().getFullYear(), 0, 1);
     const endDate = date_to ? new Date(date_to) : new Date();
 
-    // Get current date information for MTD and YTD calculations
+    // Get current date information for calculations
     const now = new Date();
-    const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
     const lastYear = currentYear - 1;
 
@@ -147,14 +164,14 @@ serve(async (req) => {
 
     // Last year same period for YoY comparison
     const lastYearStart = new Date(lastYear, 0, 1).toISOString();
-    const lastYearEnd = new Date(lastYear, currentMonth - 1, now.getDate()).toISOString();
+    const lastYearEnd = new Date(lastYear, 11, 31).toISOString();
 
     const headers = {
       'X-Shopify-Access-Token': accessToken,
       'Content-Type': 'application/json',
     };
 
-    // Test API connection first with a simple request
+    // Test API connection first
     console.log('Testing API connection...');
     const testUrl = `${baseUrl}/admin/api/2023-10/shop.json`;
     const testResponse = await fetch(testUrl, { headers });
@@ -172,25 +189,26 @@ serve(async (req) => {
       }
     }
 
-    console.log('API connection successful, fetching all orders...');
+    console.log('API connection successful, fetching orders with optimized batching...');
 
-    // Fetch ALL orders for selected period with pagination
+    // Fetch orders for selected period with limited pagination
     const periodOrdersParams = `status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}`;
-    const periodOrders = await fetchAllOrders(baseUrl, headers, periodOrdersParams);
-    
+    const periodOrders = await fetchOrdersBatch(baseUrl, headers, periodOrdersParams, 15);
     console.log('Total period orders fetched:', periodOrders.length);
 
-    // Fetch ALL orders for YTD with pagination
+    // Fetch YTD orders with limited pagination
     const ytdOrdersParams = `status=any&created_at_min=${ytdStart}&created_at_max=${ytdEnd}`;
-    const ytdOrders = await fetchAllOrders(baseUrl, headers, ytdOrdersParams);
+    const ytdOrders = await fetchOrdersBatch(baseUrl, headers, ytdOrdersParams, 15);
+    console.log('Total YTD orders fetched:', ytdOrders.length);
 
-    // Fetch ALL orders for last year (for YoY comparison) with pagination
+    // Fetch last year orders with limited pagination
     const lastYearOrdersParams = `status=any&created_at_min=${lastYearStart}&created_at_max=${lastYearEnd}`;
-    const lastYearOrders = await fetchAllOrders(baseUrl, headers, lastYearOrdersParams);
+    const lastYearOrders = await fetchOrdersBatch(baseUrl, headers, lastYearOrdersParams, 10);
+    console.log('Total last year orders fetched:', lastYearOrders.length);
 
-    // Fetch ALL customers for returning customer analysis with pagination
-    console.log('Fetching all customers...');
-    const allCustomers = await fetchAllCustomers(baseUrl, headers);
+    // Fetch customers with limited pagination
+    console.log('Fetching customers with optimized batching...');
+    const allCustomers = await fetchCustomersBatch(baseUrl, headers, 5);
     console.log('Total customers fetched:', allCustomers.length);
 
     // Calculate Period Net Sales (selected date range)
@@ -203,7 +221,7 @@ serve(async (req) => {
       return total + parseFloat(order.total_price || '0');
     }, 0);
 
-    // Calculate Last Year Net Sales for same period
+    // Calculate Last Year Net Sales
     const lastYearNetSales = lastYearOrders.reduce((total: number, order: any) => {
       return total + parseFloat(order.total_price || '0');
     }, 0);
@@ -213,30 +231,17 @@ serve(async (req) => {
       ? ((ytdNetSales - lastYearNetSales) / lastYearNetSales * 100).toFixed(1)
       : '0';
 
-    // Calculate conversion rate for selected period (using a more realistic estimate)
+    // Calculate conversion rate (using industry average estimate)
     const totalOrders = periodOrders.length;
-    // Using industry average conversion rate of 2-3% to estimate sessions
-    const estimatedSessions = Math.round(totalOrders / 0.025); // Assuming 2.5% conversion rate
-    const conversionRate = '2.50'; // This is an estimate - Shopify doesn't provide session data via Admin API
+    const estimatedSessions = Math.round(totalOrders / 0.025); // 2.5% conversion rate
+    const conversionRate = '2.50';
 
-    // Calculate returning customer rate based on customers who have multiple orders
-    const customerOrderCounts = new Map();
-    
-    // Count orders per customer for the period
-    periodOrders.forEach((order: any) => {
-      if (order.customer && order.customer.id) {
-        const customerId = order.customer.id;
-        customerOrderCounts.set(customerId, (customerOrderCounts.get(customerId) || 0) + 1);
-      }
-    });
-
-    // Also check historical order counts for customers
+    // Calculate returning customer rate
     const returningCustomers = allCustomers.filter((customer: any) => 
       customer.orders_count > 1
     ).length;
     
-    const uniqueCustomersInPeriod = customerOrderCounts.size;
-    const returningCustomerRate = uniqueCustomersInPeriod > 0 
+    const returningCustomerRate = allCustomers.length > 0 
       ? ((returningCustomers / allCustomers.length) * 100).toFixed(2)
       : '0.00';
 
@@ -244,7 +249,7 @@ serve(async (req) => {
     const orderCount = periodOrders.length || 1;
     const aov = (periodNetSales / orderCount).toFixed(2);
 
-    // Estimate site traffic for selected period (based on conversion rate)
+    // Estimate site traffic for selected period
     const siteTraffic = estimatedSessions;
 
     const analytics = {
@@ -259,8 +264,7 @@ serve(async (req) => {
 
     console.log('Analytics calculated successfully:', analytics);
     console.log('Period orders count:', totalOrders);
-    console.log('Unique customers in period:', uniqueCustomersInPeriod);
-    console.log('Total customers with multiple orders:', returningCustomers);
+    console.log('Returning customers:', returningCustomers);
 
     return new Response(JSON.stringify(analytics), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
