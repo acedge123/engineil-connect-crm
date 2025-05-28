@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { 
@@ -42,7 +41,7 @@ const DashboardLayout: React.FC = () => {
     { to: '/companies', label: 'Companies', icon: <Building2 className="w-5 h-5" /> },
     { to: '/people', label: 'People', icon: <Users className="w-5 h-5" /> },
     { to: '/tasks', label: 'Tasks', icon: <ListTodo className="w-5 h-5" /> },
-    { to: '/shopify', label: 'Shopify', icon: <ShoppingBag className="w-5 h-5" /> },
+    { to: '/shopify', label: 'Shopify Clients', icon: <ShoppingBag className="w-5 h-5" /> },
   ];
 
   if (isAdmin) {
