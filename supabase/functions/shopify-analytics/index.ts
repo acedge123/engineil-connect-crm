@@ -12,9 +12,15 @@ async function fetchAllOrders(baseUrl: string, headers: any, params: string) {
   let nextPageInfo: string | null = null;
   
   do {
-    const url = nextPageInfo 
-      ? `${baseUrl}/admin/api/2023-10/orders.json?${params}&page_info=${nextPageInfo}`
-      : `${baseUrl}/admin/api/2023-10/orders.json?${params}`;
+    let url: string;
+    
+    if (nextPageInfo) {
+      // When using page_info, we can only include it - no other query parameters
+      url = `${baseUrl}/admin/api/2023-10/orders.json?page_info=${nextPageInfo}&limit=250`;
+    } else {
+      // For the first request, we can include all our parameters
+      url = `${baseUrl}/admin/api/2023-10/orders.json?${params}&limit=250`;
+    }
     
     console.log('Fetching orders from:', url);
     
@@ -51,9 +57,13 @@ async function fetchAllCustomers(baseUrl: string, headers: any) {
   let nextPageInfo: string | null = null;
   
   do {
-    const url = nextPageInfo 
-      ? `${baseUrl}/admin/api/2023-10/customers.json?limit=250&page_info=${nextPageInfo}`
-      : `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
+    let url: string;
+    
+    if (nextPageInfo) {
+      url = `${baseUrl}/admin/api/2023-10/customers.json?page_info=${nextPageInfo}&limit=250`;
+    } else {
+      url = `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
+    }
     
     const response = await fetch(url, { headers });
     
@@ -165,17 +175,17 @@ serve(async (req) => {
     console.log('API connection successful, fetching all orders...');
 
     // Fetch ALL orders for selected period with pagination
-    const periodOrdersParams = `status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}&limit=250`;
+    const periodOrdersParams = `status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}`;
     const periodOrders = await fetchAllOrders(baseUrl, headers, periodOrdersParams);
     
     console.log('Total period orders fetched:', periodOrders.length);
 
     // Fetch ALL orders for YTD with pagination
-    const ytdOrdersParams = `status=any&created_at_min=${ytdStart}&created_at_max=${ytdEnd}&limit=250`;
+    const ytdOrdersParams = `status=any&created_at_min=${ytdStart}&created_at_max=${ytdEnd}`;
     const ytdOrders = await fetchAllOrders(baseUrl, headers, ytdOrdersParams);
 
     // Fetch ALL orders for last year (for YoY comparison) with pagination
-    const lastYearOrdersParams = `status=any&created_at_min=${lastYearStart}&created_at_max=${lastYearEnd}&limit=250`;
+    const lastYearOrdersParams = `status=any&created_at_min=${lastYearStart}&created_at_max=${lastYearEnd}`;
     const lastYearOrders = await fetchAllOrders(baseUrl, headers, lastYearOrdersParams);
 
     // Fetch ALL customers for returning customer analysis with pagination
