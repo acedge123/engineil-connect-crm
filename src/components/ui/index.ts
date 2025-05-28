@@ -12,6 +12,7 @@ export * from "./calendar";
 export * from "./card";
 export * from "./checkbox";
 export * from "./collapsible";
+export * from "./form";
 export * from "./hover-card";
 export * from "./input";
 export * from "./input-otp";
