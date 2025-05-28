@@ -18,15 +18,22 @@ serve(async (req) => {
 
     console.log('Fetching analytics for:', shopify_url);
     console.log('Date range:', date_from, 'to', date_to);
+    console.log('API key (first 10 chars):', admin_api_key?.substring(0, 10) + '...');
 
     if (!shopify_url || !admin_api_key) {
       throw new Error('Missing shopify_url or admin_api_key');
     }
 
-    // Ensure URL format is correct
-    const baseUrl = shopify_url.startsWith('https://') 
-      ? shopify_url 
-      : `https://${shopify_url}`;
+    // Ensure URL format is correct - remove any protocol and add https://
+    let baseUrl = shopify_url.replace(/^https?:\/\//, '');
+    baseUrl = `https://${baseUrl}`;
+    
+    // Ensure it ends with .myshopify.com if not already
+    if (!baseUrl.includes('.myshopify.com')) {
+      baseUrl = baseUrl.replace(/\/$/, '') + '.myshopify.com';
+    }
+
+    console.log('Final base URL:', baseUrl);
 
     // Use provided date range or default to current year
     const startDate = date_from ? new Date(date_from) : new Date(new Date().getFullYear(), 0, 1);
@@ -55,6 +62,26 @@ serve(async (req) => {
       'Content-Type': 'application/json',
     };
 
+    // Test API connection first with a simple request
+    console.log('Testing API connection...');
+    const testUrl = `${baseUrl}/admin/api/2023-10/shop.json`;
+    const testResponse = await fetch(testUrl, { headers });
+    
+    if (!testResponse.ok) {
+      const testError = await testResponse.text();
+      console.error('API test failed:', testResponse.status, testError);
+      
+      if (testResponse.status === 401) {
+        throw new Error(`Invalid Shopify API credentials. Please check your admin API key and ensure it has the correct permissions. Status: ${testResponse.status}`);
+      } else if (testResponse.status === 404) {
+        throw new Error(`Shopify store not found. Please verify the store URL: ${baseUrl}`);
+      } else {
+        throw new Error(`Shopify API error: ${testResponse.status} - ${testError}`);
+      }
+    }
+
+    console.log('API connection successful, fetching orders...');
+
     // Fetch orders for selected period
     const periodOrdersResponse = await fetch(
       `${baseUrl}/admin/api/2023-10/orders.json?status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}&limit=250`,
@@ -62,11 +89,13 @@ serve(async (req) => {
     );
 
     if (!periodOrdersResponse.ok) {
-      console.error('Period Orders API error:', await periodOrdersResponse.text());
-      throw new Error(`Shopify API error: ${periodOrdersResponse.status}`);
+      const errorText = await periodOrdersResponse.text();
+      console.error('Period Orders API error:', errorText);
+      throw new Error(`Failed to fetch orders: ${periodOrdersResponse.status} - ${errorText}`);
     }
 
     const periodOrders = await periodOrdersResponse.json();
+    console.log('Period orders fetched:', periodOrders.orders?.length || 0);
 
     // Fetch orders for YTD
     const ytdOrdersResponse = await fetch(
@@ -144,7 +173,7 @@ serve(async (req) => {
       aov: `$${aov}`,
     };
 
-    console.log('Analytics calculated:', analytics);
+    console.log('Analytics calculated successfully:', analytics);
 
     return new Response(JSON.stringify(analytics), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -155,7 +184,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        details: 'Failed to fetch Shopify analytics data'
+        details: 'Failed to fetch Shopify analytics data. Please check your Shopify store URL and admin API key.'
       }), 
       {
         status: 500,
