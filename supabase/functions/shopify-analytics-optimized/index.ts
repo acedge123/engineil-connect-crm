@@ -24,23 +24,6 @@ interface ShopifyAnalytics {
   aov: string;
 }
 
-async function fetchShopifyGraphQL(baseUrl: string, accessToken: string, query: string, variables: any = {}) {
-  const response = await fetch(`${baseUrl}/admin/api/2023-10/graphql.json`, {
-    method: 'POST',
-    headers: {
-      'X-Shopify-Access-Token': accessToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`GraphQL API error: ${response.status}`);
-  }
-
-  return await response.json();
-}
-
 async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalytics> {
   const { shopify_url, admin_api_key, date_from, date_to } = params;
   
@@ -69,32 +52,12 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
   const lastYearEnd = new Date(lastYear, 11, 31);
 
   try {
-    // Try to use GraphQL Analytics API for better performance
-    const analyticsQuery = `
-      query getAnalytics($startDate: DateTime!, $endDate: DateTime!) {
-        orders(first: 1, query: "created_at:>='$startDate' AND created_at:<='$endDate'") {
-          edges {
-            node {
-              id
-            }
-          }
-        }
-        shop {
-          name
-          currencyCode
-        }
-      }
-    `;
-
-    console.log('Attempting to fetch analytics data via GraphQL...');
-    
-    // For now, let's use a simplified approach that fetches summary data efficiently
     const headers = {
       'X-Shopify-Access-Token': accessToken,
       'Content-Type': 'application/json',
     };
 
-    // Fetch a small sample to test connection
+    // Test API connection
     const testUrl = `${baseUrl}/admin/api/2023-10/orders.json?limit=1&status=any`;
     const testResponse = await fetch(testUrl, { headers });
     
@@ -102,14 +65,14 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
       throw new Error(`API test failed: ${testResponse.status}`);
     }
 
-    console.log('API connection successful, fetching optimized analytics...');
+    console.log('API connection successful, fetching comprehensive analytics...');
 
-    // Fetch orders count and basic data for each period with pagination limits
+    // Fetch orders count and basic data for each period with higher limits for accuracy
     const [periodData, ytdData, lastYearData, customerData] = await Promise.all([
-      fetchOrdersSummary(baseUrl, headers, startDate, endDate, 'period'),
-      fetchOrdersSummary(baseUrl, headers, ytdStart, ytdEnd, 'ytd'),
-      fetchOrdersSummary(baseUrl, headers, lastYearStart, lastYearEnd, 'lastYear'),
-      fetchCustomersSummary(baseUrl, headers)
+      fetchOrdersSummary(baseUrl, headers, startDate, endDate, 'period', 15), // Increased page limit
+      fetchOrdersSummary(baseUrl, headers, ytdStart, ytdEnd, 'ytd', 15),
+      fetchOrdersSummary(baseUrl, headers, lastYearStart, lastYearEnd, 'lastYear', 10),
+      fetchCustomersSummary(baseUrl, headers, 5)
     ]);
 
     // Calculate metrics
@@ -147,6 +110,7 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
     };
 
     console.log('Analytics calculated successfully:', analytics);
+    console.log(`Period data: ${periodData.orderCount} orders, $${periodNetSales.toFixed(2)} total sales`);
     return analytics;
 
   } catch (error) {
@@ -155,16 +119,15 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
   }
 }
 
-async function fetchOrdersSummary(baseUrl: string, headers: any, startDate: Date, endDate: Date, period: string) {
+async function fetchOrdersSummary(baseUrl: string, headers: any, startDate: Date, endDate: Date, period: string, maxPages: number = 15) {
   const params = `status=any&created_at_min=${startDate.toISOString()}&created_at_max=${endDate.toISOString()}&limit=250`;
   let totalSales = 0;
   let orderCount = 0;
   let hasNextPage = true;
   let pageInfo = '';
   let pageCount = 0;
-  const maxPages = 5; // Limit pages for performance
 
-  console.log(`Fetching ${period} orders summary...`);
+  console.log(`Fetching ${period} orders summary (up to ${maxPages} pages)...`);
 
   while (hasNextPage && pageCount < maxPages) {
     const url = pageInfo 
@@ -201,20 +164,29 @@ async function fetchOrdersSummary(baseUrl: string, headers: any, startDate: Date
 
     pageCount++;
     console.log(`${period}: Fetched ${orders.length} orders on page ${pageCount}, total: ${orderCount}, sales: $${totalSales.toFixed(2)}`);
+
+    // If we got less than 250 orders, we've reached the end
+    if (orders.length < 250) {
+      console.log(`${period}: Reached end of orders (page returned ${orders.length} orders)`);
+      break;
+    }
+  }
+
+  if (pageCount >= maxPages) {
+    console.log(`${period}: Reached maximum page limit (${maxPages}), may have incomplete data`);
   }
 
   return { totalSales, orderCount };
 }
 
-async function fetchCustomersSummary(baseUrl: string, headers: any) {
+async function fetchCustomersSummary(baseUrl: string, headers: any, maxPages: number = 5) {
   let totalCustomers = 0;
   let returningCustomers = 0;
   let hasNextPage = true;
   let pageInfo = '';
   let pageCount = 0;
-  const maxPages = 3; // Limit for performance
 
-  console.log('Fetching customers summary...');
+  console.log(`Fetching customers summary (up to ${maxPages} pages)...`);
 
   while (hasNextPage && pageCount < maxPages) {
     const url = pageInfo 
@@ -252,6 +224,11 @@ async function fetchCustomersSummary(baseUrl: string, headers: any) {
 
     pageCount++;
     console.log(`Customers: Fetched ${customers.length} on page ${pageCount}, total: ${totalCustomers}, returning: ${returningCustomers}`);
+
+    // If we got less than 250 customers, we've reached the end
+    if (customers.length < 250) {
+      break;
+    }
   }
 
   return { totalCustomers, returningCustomers };
@@ -266,7 +243,7 @@ serve(async (req) => {
   try {
     const params: AnalyticsParams = await req.json();
     
-    console.log('Fetching optimized analytics for:', params.shopify_url);
+    console.log('Fetching comprehensive analytics for:', params.shopify_url);
     console.log('Date range:', params.date_from, 'to', params.date_to);
 
     const analytics = await getAnalyticsData(params);
