@@ -7,6 +7,82 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function fetchAllOrders(baseUrl: string, headers: any, params: string) {
+  let allOrders: any[] = [];
+  let nextPageInfo: string | null = null;
+  
+  do {
+    const url = nextPageInfo 
+      ? `${baseUrl}/admin/api/2023-10/orders.json?${params}&page_info=${nextPageInfo}`
+      : `${baseUrl}/admin/api/2023-10/orders.json?${params}`;
+    
+    console.log('Fetching orders from:', url);
+    
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch orders: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    allOrders = allOrders.concat(data.orders || []);
+    
+    // Check for pagination using Link header
+    const linkHeader = response.headers.get('Link');
+    nextPageInfo = null;
+    
+    if (linkHeader) {
+      const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
+      if (nextMatch) {
+        nextPageInfo = nextMatch[1];
+      }
+    }
+    
+    console.log(`Fetched ${data.orders?.length || 0} orders, total so far: ${allOrders.length}`);
+    
+  } while (nextPageInfo && allOrders.length < 10000); // Safety limit
+  
+  return allOrders;
+}
+
+async function fetchAllCustomers(baseUrl: string, headers: any) {
+  let allCustomers: any[] = [];
+  let nextPageInfo: string | null = null;
+  
+  do {
+    const url = nextPageInfo 
+      ? `${baseUrl}/admin/api/2023-10/customers.json?limit=250&page_info=${nextPageInfo}`
+      : `${baseUrl}/admin/api/2023-10/customers.json?limit=250`;
+    
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      console.error('Failed to fetch customers:', response.status);
+      break;
+    }
+    
+    const data = await response.json();
+    allCustomers = allCustomers.concat(data.customers || []);
+    
+    // Check for pagination using Link header
+    const linkHeader = response.headers.get('Link');
+    nextPageInfo = null;
+    
+    if (linkHeader) {
+      const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
+      if (nextMatch) {
+        nextPageInfo = nextMatch[1];
+      }
+    }
+    
+    console.log(`Fetched ${data.customers?.length || 0} customers, total so far: ${allCustomers.length}`);
+    
+  } while (nextPageInfo && allCustomers.length < 50000); // Safety limit
+  
+  return allCustomers;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -86,88 +162,80 @@ serve(async (req) => {
       }
     }
 
-    console.log('API connection successful, fetching orders...');
+    console.log('API connection successful, fetching all orders...');
 
-    // Fetch orders for selected period
-    const periodOrdersResponse = await fetch(
-      `${baseUrl}/admin/api/2023-10/orders.json?status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}&limit=250`,
-      { headers }
-    );
+    // Fetch ALL orders for selected period with pagination
+    const periodOrdersParams = `status=any&created_at_min=${periodStart}&created_at_max=${periodEnd}&limit=250`;
+    const periodOrders = await fetchAllOrders(baseUrl, headers, periodOrdersParams);
+    
+    console.log('Total period orders fetched:', periodOrders.length);
 
-    if (!periodOrdersResponse.ok) {
-      const errorText = await periodOrdersResponse.text();
-      console.error('Period Orders API error:', errorText);
-      throw new Error(`Failed to fetch orders: ${periodOrdersResponse.status} - ${errorText}`);
-    }
+    // Fetch ALL orders for YTD with pagination
+    const ytdOrdersParams = `status=any&created_at_min=${ytdStart}&created_at_max=${ytdEnd}&limit=250`;
+    const ytdOrders = await fetchAllOrders(baseUrl, headers, ytdOrdersParams);
 
-    const periodOrders = await periodOrdersResponse.json();
-    console.log('Period orders fetched:', periodOrders.orders?.length || 0);
+    // Fetch ALL orders for last year (for YoY comparison) with pagination
+    const lastYearOrdersParams = `status=any&created_at_min=${lastYearStart}&created_at_max=${lastYearEnd}&limit=250`;
+    const lastYearOrders = await fetchAllOrders(baseUrl, headers, lastYearOrdersParams);
 
-    // Fetch orders for YTD
-    const ytdOrdersResponse = await fetch(
-      `${baseUrl}/admin/api/2023-10/orders.json?status=any&created_at_min=${ytdStart}&created_at_max=${ytdEnd}&limit=250`,
-      { headers }
-    );
-
-    const ytdOrders = await ytdOrdersResponse.json();
-
-    // Fetch orders for last year (for YoY comparison)
-    const lastYearOrdersResponse = await fetch(
-      `${baseUrl}/admin/api/2023-10/orders.json?status=any&created_at_min=${lastYearStart}&created_at_max=${lastYearEnd}&limit=250`,
-      { headers }
-    );
-
-    const lastYearOrders = await lastYearOrdersResponse.json();
-
-    // Fetch customers for returning customer analysis
-    const customersResponse = await fetch(
-      `${baseUrl}/admin/api/2023-10/customers.json?limit=250`,
-      { headers }
-    );
-
-    const customers = await customersResponse.json();
+    // Fetch ALL customers for returning customer analysis with pagination
+    console.log('Fetching all customers...');
+    const allCustomers = await fetchAllCustomers(baseUrl, headers);
+    console.log('Total customers fetched:', allCustomers.length);
 
     // Calculate Period Net Sales (selected date range)
-    const periodNetSales = periodOrders.orders?.reduce((total: number, order: any) => {
+    const periodNetSales = periodOrders.reduce((total: number, order: any) => {
       return total + parseFloat(order.total_price || '0');
-    }, 0) || 0;
+    }, 0);
 
     // Calculate YTD Net Sales
-    const ytdNetSales = ytdOrders.orders?.reduce((total: number, order: any) => {
+    const ytdNetSales = ytdOrders.reduce((total: number, order: any) => {
       return total + parseFloat(order.total_price || '0');
-    }, 0) || 0;
+    }, 0);
 
     // Calculate Last Year Net Sales for same period
-    const lastYearNetSales = lastYearOrders.orders?.reduce((total: number, order: any) => {
+    const lastYearNetSales = lastYearOrders.reduce((total: number, order: any) => {
       return total + parseFloat(order.total_price || '0');
-    }, 0) || 0;
+    }, 0);
 
     // Calculate YoY growth
     const yoyGrowth = lastYearNetSales > 0 
       ? ((ytdNetSales - lastYearNetSales) / lastYearNetSales * 100).toFixed(1)
       : '0';
 
-    // Calculate conversion rate for selected period
-    const totalOrders = periodOrders.orders?.length || 0;
-    const estimatedSessions = totalOrders * 40; // Rough estimate: 1 order per 40 sessions for 2.5% conversion
-    const conversionRate = estimatedSessions > 0 ? ((totalOrders / estimatedSessions) * 100).toFixed(2) : '0.00';
+    // Calculate conversion rate for selected period (using a more realistic estimate)
+    const totalOrders = periodOrders.length;
+    // Using industry average conversion rate of 2-3% to estimate sessions
+    const estimatedSessions = Math.round(totalOrders / 0.025); // Assuming 2.5% conversion rate
+    const conversionRate = '2.50'; // This is an estimate - Shopify doesn't provide session data via Admin API
 
-    // Calculate returning customer rate
-    const returningCustomers = customers.customers?.filter((customer: any) => 
+    // Calculate returning customer rate based on customers who have multiple orders
+    const customerOrderCounts = new Map();
+    
+    // Count orders per customer for the period
+    periodOrders.forEach((order: any) => {
+      if (order.customer && order.customer.id) {
+        const customerId = order.customer.id;
+        customerOrderCounts.set(customerId, (customerOrderCounts.get(customerId) || 0) + 1);
+      }
+    });
+
+    // Also check historical order counts for customers
+    const returningCustomers = allCustomers.filter((customer: any) => 
       customer.orders_count > 1
-    ).length || 0;
-    const totalCustomers = customers.customers?.length || 1;
-    const returningCustomerRate = ((returningCustomers / totalCustomers) * 100).toFixed(2);
+    ).length;
+    
+    const uniqueCustomersInPeriod = customerOrderCounts.size;
+    const returningCustomerRate = uniqueCustomersInPeriod > 0 
+      ? ((returningCustomers / allCustomers.length) * 100).toFixed(2)
+      : '0.00';
 
     // Calculate AOV for selected period
-    const totalOrderValue = periodOrders.orders?.reduce((total: number, order: any) => {
-      return total + parseFloat(order.total_price || '0');
-    }, 0) || 0;
-    const orderCount = periodOrders.orders?.length || 1;
-    const aov = (totalOrderValue / orderCount).toFixed(2);
+    const orderCount = periodOrders.length || 1;
+    const aov = (periodNetSales / orderCount).toFixed(2);
 
-    // Estimate site traffic for selected period
-    const siteTraffic = Math.round(totalOrders * 45); // Rough estimate based on conversion rates
+    // Estimate site traffic for selected period (based on conversion rate)
+    const siteTraffic = estimatedSessions;
 
     const analytics = {
       mtd_net_sales: `$${periodNetSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -180,6 +248,9 @@ serve(async (req) => {
     };
 
     console.log('Analytics calculated successfully:', analytics);
+    console.log('Period orders count:', totalOrders);
+    console.log('Unique customers in period:', uniqueCustomersInPeriod);
+    console.log('Total customers with multiple orders:', returningCustomers);
 
     return new Response(JSON.stringify(analytics), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
