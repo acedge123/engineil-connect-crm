@@ -36,6 +36,36 @@ export type Database = {
         }
         Relationships: []
       }
+      shopify_clients: {
+        Row: {
+          admin_api_key: string
+          client_name: string
+          created_at: string
+          id: string
+          shopify_url: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_api_key: string
+          client_name: string
+          created_at?: string
+          id?: string
+          shopify_url: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_api_key?: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          shopify_url?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

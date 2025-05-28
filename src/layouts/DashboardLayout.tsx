@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { 
@@ -10,7 +11,8 @@ import {
   Menu, 
   X,
   Building,
-  Bell
+  Bell,
+  ShoppingBag
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -40,6 +42,7 @@ const DashboardLayout: React.FC = () => {
     { to: '/companies', label: 'Companies', icon: <Building2 className="w-5 h-5" /> },
     { to: '/people', label: 'People', icon: <Users className="w-5 h-5" /> },
     { to: '/tasks', label: 'Tasks', icon: <ListTodo className="w-5 h-5" /> },
+    { to: '/shopify', label: 'Shopify', icon: <ShoppingBag className="w-5 h-5" /> },
   ];
 
   if (isAdmin) {
