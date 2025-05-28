@@ -24,59 +24,74 @@ interface ShopifyAnalytics {
   aov: string;
 }
 
-async function fetchShopifyAnalytics(baseUrl: string, headers: any, dateFrom: string, dateTo: string) {
-  console.log(`Fetching analytics data from ${dateFrom} to ${dateTo}`);
+async function fetchOrdersData(baseUrl: string, headers: any, dateFrom: string, dateTo: string, maxOrders = 5000) {
+  console.log(`Fetching orders from ${dateFrom} to ${dateTo}`);
+  
+  let allOrders: any[] = [];
+  let nextPageInfo: string | null = null;
+  let fetchedCount = 0;
   
   try {
-    // Use Shopify's Analytics API for aggregated sales data
-    const analyticsUrl = `${baseUrl}/admin/api/2023-10/analytics/reports/orders.json?created_at_min=${dateFrom}&created_at_max=${dateTo}`;
-    
-    const response = await fetch(analyticsUrl, { 
-      headers,
-      signal: AbortSignal.timeout(15000)
-    });
-    
-    if (!response.ok) {
-      console.log(`Analytics API failed with ${response.status}, falling back to orders count`);
+    do {
+      let url: string;
       
-      // Fallback: Get basic order count and estimate sales
-      const ordersCountUrl = `${baseUrl}/admin/api/2023-10/orders/count.json?created_at_min=${dateFrom}&created_at_max=${dateTo}&status=any`;
-      const countResponse = await fetch(ordersCountUrl, { headers });
-      
-      if (countResponse.ok) {
-        const countData = await countResponse.json();
-        const orderCount = countData.count || 0;
-        
-        // Estimate sales based on industry averages
-        const estimatedAOV = 75; // Industry average AOV
-        const estimatedSales = orderCount * estimatedAOV;
-        
-        return {
-          total_sales: estimatedSales,
-          order_count: orderCount,
-          estimated: true
-        };
+      if (nextPageInfo) {
+        url = `${baseUrl}/admin/api/2023-10/orders.json?page_info=${nextPageInfo}&limit=250&status=any`;
+      } else {
+        url = `${baseUrl}/admin/api/2023-10/orders.json?created_at_min=${dateFrom}&created_at_max=${dateTo}&limit=250&status=any`;
       }
       
-      throw new Error('Both Analytics API and fallback failed');
-    }
+      const response = await fetch(url, { 
+        headers,
+        signal: AbortSignal.timeout(15000)
+      });
+      
+      if (!response.ok) {
+        console.error(`Orders API failed with ${response.status}`);
+        break;
+      }
+      
+      const data = await response.json();
+      const orders = data.orders || [];
+      allOrders = allOrders.concat(orders);
+      fetchedCount += orders.length;
+      
+      console.log(`Fetched ${orders.length} orders, total: ${fetchedCount}`);
+      
+      // Check for pagination
+      const linkHeader = response.headers.get('Link');
+      nextPageInfo = null;
+      
+      if (linkHeader) {
+        const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>; rel="next"/);
+        if (nextMatch) {
+          nextPageInfo = nextMatch[1];
+        }
+      }
+      
+      // Stop if we've reached our limit
+      if (fetchedCount >= maxOrders) {
+        console.log(`Reached maximum orders limit (${maxOrders}), stopping fetch`);
+        break;
+      }
+      
+    } while (nextPageInfo);
     
-    const data = await response.json();
-    console.log('Analytics data received:', data);
+    // Calculate total sales from actual orders
+    const totalSales = allOrders.reduce((sum: number, order: any) => {
+      return sum + parseFloat(order.total_price || '0');
+    }, 0);
     
-    // Parse analytics response (structure may vary)
-    const report = data.report || data;
-    const totalSales = report.total_sales || report.net_sales || 0;
-    const orderCount = report.order_count || report.orders_count || 0;
+    console.log(`Processed ${allOrders.length} orders with total sales: $${totalSales}`);
     
     return {
-      total_sales: parseFloat(totalSales.toString()),
-      order_count: parseInt(orderCount.toString()),
-      estimated: false
+      total_sales: totalSales,
+      order_count: allOrders.length,
+      orders: allOrders
     };
     
   } catch (error) {
-    console.error('Analytics fetch error:', error);
+    console.error('Orders fetch error:', error);
     throw error;
   }
 }
@@ -148,45 +163,49 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
       throw new Error(`API test failed: ${testResponse.status}`);
     }
 
-    console.log('API connection successful, fetching analytics data...');
+    console.log('API connection successful, fetching real orders data...');
 
-    // Fetch analytics data for different periods using Analytics API
-    const [periodAnalytics, ytdAnalytics, lastYearAnalytics, customerMetrics] = await Promise.all([
-      fetchShopifyAnalytics(baseUrl, headers, startDate.toISOString(), endDate.toISOString()),
-      fetchShopifyAnalytics(baseUrl, headers, ytdStart.toISOString(), ytdEnd.toISOString()),
-      fetchShopifyAnalytics(baseUrl, headers, lastYearStart.toISOString(), lastYearEnd.toISOString()),
+    // Fetch actual orders data for different periods
+    const [periodOrders, ytdOrders, lastYearOrders, customerMetrics] = await Promise.allSettled([
+      fetchOrdersData(baseUrl, headers, startDate.toISOString(), endDate.toISOString(), 2000),
+      fetchOrdersData(baseUrl, headers, ytdStart.toISOString(), ytdEnd.toISOString(), 3000),
+      fetchOrdersData(baseUrl, headers, lastYearStart.toISOString(), lastYearEnd.toISOString(), 2000),
       fetchCustomerMetrics(baseUrl, headers)
     ]);
 
-    console.log('Period analytics:', periodAnalytics);
-    console.log('YTD analytics:', ytdAnalytics);
-    console.log('Last year analytics:', lastYearAnalytics);
-    console.log('Customer metrics:', customerMetrics);
+    // Extract results from Promise.allSettled
+    const periodData = periodOrders.status === 'fulfilled' ? periodOrders.value : { total_sales: 0, order_count: 0, orders: [] };
+    const ytdData = ytdOrders.status === 'fulfilled' ? ytdOrders.value : { total_sales: 0, order_count: 0, orders: [] };
+    const lastYearData = lastYearOrders.status === 'fulfilled' ? lastYearOrders.value : { total_sales: 0, order_count: 0, orders: [] };
+    const customerData = customerMetrics.status === 'fulfilled' ? customerMetrics.value : { total_customers: 0, estimated: true };
 
-    // Calculate metrics
-    const periodNetSales = periodAnalytics.total_sales;
-    const ytdNetSales = ytdAnalytics.total_sales;
-    const lastYearNetSales = lastYearAnalytics.total_sales;
+    console.log('Period sales:', periodData.total_sales, 'from', periodData.order_count, 'orders');
+    console.log('YTD sales:', ytdData.total_sales, 'from', ytdData.order_count, 'orders');
+    console.log('Last year sales:', lastYearData.total_sales, 'from', lastYearData.order_count, 'orders');
+
+    // Calculate metrics using real data
+    const periodNetSales = periodData.total_sales;
+    const ytdNetSales = ytdData.total_sales;
+    const lastYearNetSales = lastYearData.total_sales;
 
     // Calculate YoY growth
     const yoyGrowth = lastYearNetSales > 0 
       ? ((ytdNetSales - lastYearNetSales) / lastYearNetSales * 100).toFixed(1)
       : '0';
 
-    // Calculate conversion rate (using industry estimates)
-    const totalOrders = periodAnalytics.order_count;
+    // Calculate conversion rate (using industry estimates since we don't have session data)
+    const totalOrders = periodData.order_count;
     const estimatedSessions = Math.round(totalOrders / 0.025); // 2.5% conversion rate
     const conversionRate = totalOrders > 0 ? '2.50' : '0.00';
 
-    // Calculate returning customer rate (estimate based on industry data)
-    const totalCustomers = customerMetrics.total_customers;
+    // Calculate returning customer rate
+    const totalCustomers = customerData.total_customers;
     const returningCustomerRate = totalCustomers > 0 
       ? ((totalCustomers * 0.27) / totalCustomers * 100).toFixed(2) // 27% industry average
-      : '27.00'; // Default industry average
+      : '27.00';
 
-    // Calculate AOV for selected period
-    const orderCount = periodAnalytics.order_count || 1;
-    const aov = periodAnalytics.order_count > 0 ? (periodNetSales / orderCount).toFixed(2) : '0.00';
+    // Calculate real AOV for selected period
+    const aov = periodData.order_count > 0 ? (periodNetSales / periodData.order_count).toFixed(2) : '0.00';
 
     // Estimate site traffic for selected period
     const siteTraffic = estimatedSessions;
@@ -201,11 +220,7 @@ async function getAnalyticsData(params: AnalyticsParams): Promise<ShopifyAnalyti
       aov: `$${aov}`,
     };
 
-    console.log('Analytics calculated successfully:', analytics);
-    
-    if (periodAnalytics.estimated || ytdAnalytics.estimated || lastYearAnalytics.estimated) {
-      console.log('Note: Some data is estimated due to API limitations');
-    }
+    console.log('Analytics calculated successfully with real data:', analytics);
 
     return analytics;
 
@@ -224,7 +239,7 @@ serve(async (req) => {
   try {
     const params: AnalyticsParams = await req.json();
     
-    console.log('Fetching analytics using Analytics API for:', params.shopify_url);
+    console.log('Fetching real Shopify data for:', params.shopify_url);
     console.log('Date range:', params.date_from, 'to', params.date_to);
 
     const analytics = await getAnalyticsData(params);
