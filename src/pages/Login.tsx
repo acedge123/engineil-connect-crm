@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -262,14 +261,6 @@ const Login = () => {
             </Card>
           </TabsContent>
         </Tabs>
-        
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>
-            Test credentials for demo: <br />
-            Admin: admin@engineil.ing / admin123 <br />
-            User: user@engineil.ing / password123
-          </p>
-        </div>
       </div>
     </div>
   );
