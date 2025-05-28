@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -18,10 +17,13 @@ serve(async (req) => {
 
     console.log('Fetching analytics for:', shopify_url);
     console.log('Date range:', date_from, 'to', date_to);
-    console.log('API key (first 10 chars):', admin_api_key?.substring(0, 10) + '...');
+    
+    // Use the new access token you provided
+    const accessToken = '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';
+    console.log('Using provided access token (first 10 chars):', accessToken.substring(0, 10) + '...');
 
-    if (!shopify_url || !admin_api_key) {
-      throw new Error('Missing shopify_url or admin_api_key');
+    if (!shopify_url) {
+      throw new Error('Missing shopify_url');
     }
 
     // Ensure URL format is correct - remove any protocol and add https://
@@ -58,7 +60,7 @@ serve(async (req) => {
     const lastYearEnd = new Date(lastYear, currentMonth - 1, now.getDate()).toISOString();
 
     const headers = {
-      'X-Shopify-Access-Token': admin_api_key,
+      'X-Shopify-Access-Token': accessToken,
       'Content-Type': 'application/json',
     };
 
