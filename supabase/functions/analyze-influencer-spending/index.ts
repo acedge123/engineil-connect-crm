@@ -41,6 +41,8 @@ async function fetchShopifyOrders(shopifyUrl: string, apiKey: string, dateFrom?:
     'Content-Type': 'application/json',
   };
 
+  // Fetch more orders by making multiple requests if needed
+  let allOrders: ShopifyOrder[] = [];
   let url = `${baseUrl}/admin/api/2023-10/orders.json?limit=250&status=any`;
   
   if (dateFrom) {
@@ -52,14 +54,67 @@ async function fetchShopifyOrders(shopifyUrl: string, apiKey: string, dateFrom?:
 
   console.log('Fetching orders from:', url);
 
-  const response = await fetch(url, { headers });
+  // Fetch first page
+  let response = await fetch(url, { headers });
   
   if (!response.ok) {
     throw new Error(`Shopify API failed with status ${response.status}`);
   }
 
-  const data = await response.json();
-  return data.orders || [];
+  let data = await response.json();
+  allOrders = data.orders || [];
+  
+  console.log(`Fetched ${allOrders.length} orders from first page`);
+
+  // Check if there are more pages (Shopify uses Link header for pagination)
+  const linkHeader = response.headers.get('Link');
+  let nextPageUrl = null;
+  
+  if (linkHeader && linkHeader.includes('rel="next"')) {
+    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+    if (nextMatch) {
+      nextPageUrl = nextMatch[1];
+    }
+  }
+
+  // Fetch additional pages (up to 4 more pages = 1000 more orders)
+  let pageCount = 1;
+  while (nextPageUrl && pageCount < 5) {
+    console.log(`Fetching page ${pageCount + 1} from: ${nextPageUrl}`);
+    
+    response = await fetch(nextPageUrl, { headers });
+    
+    if (!response.ok) {
+      console.log(`Failed to fetch page ${pageCount + 1}, continuing with current data`);
+      break;
+    }
+
+    data = await response.json();
+    const pageOrders = data.orders || [];
+    allOrders = allOrders.concat(pageOrders);
+    
+    console.log(`Fetched ${pageOrders.length} orders from page ${pageCount + 1}, total: ${allOrders.length}`);
+
+    // Check for next page
+    const nextLinkHeader = response.headers.get('Link');
+    nextPageUrl = null;
+    
+    if (nextLinkHeader && nextLinkHeader.includes('rel="next"')) {
+      const nextMatch = nextLinkHeader.match(/<([^>]+)>;\s*rel="next"/);
+      if (nextMatch) {
+        nextPageUrl = nextMatch[1];
+      }
+    }
+    
+    pageCount++;
+  }
+
+  return allOrders;
+}
+
+// Helper function to normalize email addresses
+function normalizeEmail(email: string): string {
+  return email.toLowerCase().trim().replace(/\s+/g, '');
 }
 
 async function analyzeInfluencerSpending(
@@ -89,20 +144,48 @@ async function analyzeInfluencerSpending(
 
   console.log(`Analyzing ${influencers.length} influencers`);
 
+  // Create a map of normalized emails from orders for faster lookup
+  const orderEmailMap = new Map<string, ShopifyOrder[]>();
+  
+  orders.forEach(order => {
+    // Check customer email
+    if (order.customer?.email) {
+      const normalizedEmail = normalizeEmail(order.customer.email);
+      if (!orderEmailMap.has(normalizedEmail)) {
+        orderEmailMap.set(normalizedEmail, []);
+      }
+      orderEmailMap.get(normalizedEmail)!.push(order);
+    }
+    
+    // Also check order email if different
+    if (order.email && order.email !== order.customer?.email) {
+      const normalizedEmail = normalizeEmail(order.email);
+      if (!orderEmailMap.has(normalizedEmail)) {
+        orderEmailMap.set(normalizedEmail, []);
+      }
+      orderEmailMap.get(normalizedEmail)!.push(order);
+    }
+  });
+
+  console.log(`Created email map with ${orderEmailMap.size} unique emails from orders`);
+
   const analysisResults = [];
+  let foundMatches = 0;
+  let totalOrdersMatched = 0;
 
   for (const influencer of influencers) {
-    console.log(`Analyzing influencer: ${influencer.email}`);
+    const normalizedInfluencerEmail = normalizeEmail(influencer.email);
+    console.log(`Analyzing influencer: ${influencer.email} (normalized: ${normalizedInfluencerEmail})`);
     
-    // Find orders for this influencer
-    const influencerOrders = orders.filter(order => 
-      order.customer?.email?.toLowerCase() === influencer.email.toLowerCase() ||
-      order.email?.toLowerCase() === influencer.email.toLowerCase()
-    );
+    // Find orders for this influencer using normalized email lookup
+    const influencerOrders = orderEmailMap.get(normalizedInfluencerEmail) || [];
 
     console.log(`Found ${influencerOrders.length} orders for ${influencer.email}`);
 
     if (influencerOrders.length > 0) {
+      foundMatches++;
+      totalOrdersMatched += influencerOrders.length;
+      
       // Calculate spending metrics
       const totalSpent = influencerOrders.reduce((sum, order) => 
         sum + parseFloat(order.total_price || '0'), 0
@@ -120,6 +203,8 @@ async function analyzeInfluencerSpending(
       const customerName = influencerOrders[0].customer?.first_name && influencerOrders[0].customer?.last_name
         ? `${influencerOrders[0].customer.first_name} ${influencerOrders[0].customer.last_name}`
         : null;
+
+      console.log(`${influencer.email}: $${totalSpent.toFixed(2)} across ${orderCount} orders`);
 
       const analysisResult = {
         user_id: userId,
@@ -155,6 +240,20 @@ async function analyzeInfluencerSpending(
       analysisResults.push(analysisResult);
     }
   }
+
+  console.log(`Analysis complete: ${foundMatches} influencers matched, ${totalOrdersMatched} total orders matched`);
+  
+  // Log some sample emails for debugging
+  console.log('Sample influencer emails (first 10):');
+  influencers.slice(0, 10).forEach(inf => {
+    console.log(`  ${inf.email} -> ${normalizeEmail(inf.email)}`);
+  });
+  
+  console.log('Sample order emails (first 10):');
+  const sampleEmails = Array.from(orderEmailMap.keys()).slice(0, 10);
+  sampleEmails.forEach(email => {
+    console.log(`  ${email} (${orderEmailMap.get(email)?.length} orders)`);
+  });
 
   return analysisResults;
 }
@@ -263,6 +362,7 @@ serve(async (req) => {
         success: true,
         analyzed_influencers: analysisResults.length,
         total_orders: orders.length,
+        matched_influencers: analysisResults.filter(r => r.total_spent > 0).length,
         results: insertData
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -272,6 +372,7 @@ serve(async (req) => {
         success: true,
         analyzed_influencers: 0,
         total_orders: orders.length,
+        matched_influencers: 0,
         message: 'No influencers to analyze'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
