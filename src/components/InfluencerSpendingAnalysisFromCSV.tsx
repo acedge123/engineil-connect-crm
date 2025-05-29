@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import CustomerOrdersUpload from './CustomerOrdersUpload';
 
@@ -18,6 +20,7 @@ type CustomerOrder = {
   order_id: string;
   order_total: number;
   order_date: string;
+  shopify_client_id?: string;
   created_at: string;
 };
 
@@ -37,22 +40,55 @@ type InfluencerSpendingResult = {
   };
 };
 
+type ShopifyClient = {
+  id: string;
+  client_name: string;
+  shopify_url: string;
+};
+
 const InfluencerSpendingAnalysisFromCSV = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [analysisResults, setAnalysisResults] = useState<InfluencerSpendingResult[]>([]);
+  const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('');
 
-  // Fetch customer orders
-  const { data: customerOrders, isLoading: ordersLoading } = useQuery({
-    queryKey: ['customer-orders'],
+  // Fetch Shopify clients
+  const { data: shopifyClients } = useQuery({
+    queryKey: ['shopify-clients'],
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
       
       const { data, error } = await supabase
+        .from('shopify_clients')
+        .select('id, client_name, shopify_url')
+        .eq('user_id', user.id)
+        .order('client_name');
+
+      if (error) throw error;
+      return data as ShopifyClient[];
+    },
+    enabled: !!user,
+  });
+
+  // Fetch customer orders
+  const { data: customerOrders, isLoading: ordersLoading } = useQuery({
+    queryKey: ['customer-orders', selectedShopifyClient],
+    queryFn: async () => {
+      if (!user) throw new Error('User not authenticated');
+      
+      let query = supabase
         .from('customer_orders')
         .select('*')
         .eq('user_id', user.id)
         .order('order_date', { ascending: false });
+
+      if (selectedShopifyClient) {
+        query = query.eq('shopify_client_id', selectedShopifyClient);
+      } else {
+        query = query.is('shopify_client_id', null);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       return data as CustomerOrder[];
@@ -95,7 +131,11 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         ordersByEmail.get(normalizedEmail)!.push(order);
       });
 
-      console.log(`Analyzing ${influencers.length} influencers against ${customerOrders.length} orders`);
+      const clientName = selectedShopifyClient 
+        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
+        : 'Default';
+
+      console.log(`Analyzing ${influencers.length} influencers against ${customerOrders.length} orders for client: ${clientName}`);
 
       const results: InfluencerSpendingResult[] = [];
 
@@ -162,14 +202,23 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         first_order_date: result.first_order_date || null,
         last_order_date: result.last_order_date || null,
         average_order_value: result.average_order_value,
+        shopify_client_id: selectedShopifyClient || null,
         analysis_date: new Date().toISOString(),
       }));
 
-      // Delete previous analysis
-      await supabase
+      // Delete previous analysis for this client
+      let deleteQuery = supabase
         .from('influencer_spending_analysis')
         .delete()
         .eq('user_id', user.id);
+
+      if (selectedShopifyClient) {
+        deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
+      } else {
+        deleteQuery = deleteQuery.is('shopify_client_id', null);
+      }
+
+      await deleteQuery;
 
       // Insert new analysis
       const { data, error } = await supabase
@@ -183,7 +232,10 @@ const InfluencerSpendingAnalysisFromCSV = () => {
     },
     onSuccess: (results) => {
       setAnalysisResults(results);
-      toast.success(`Analysis complete! Found ${results.filter(r => r.total_spent > 0).length} influencers with orders`);
+      const clientName = selectedShopifyClient 
+        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
+        : 'Default';
+      toast.success(`Analysis complete for ${clientName}! Found ${results.filter(r => r.total_spent > 0).length} influencers with orders`);
     },
     onError: (error) => {
       toast.error(`Analysis failed: ${error.message}`);
@@ -192,7 +244,10 @@ const InfluencerSpendingAnalysisFromCSV = () => {
 
   const handleAnalyze = () => {
     if (!customerOrders || customerOrders.length === 0) {
-      toast.error('Please upload customer orders data first');
+      const clientName = selectedShopifyClient 
+        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'selected client'
+        : 'default client';
+      toast.error(`Please upload customer orders data for ${clientName} first`);
       return;
     }
     if (!influencers || influencers.length === 0) {
@@ -207,6 +262,10 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       toast.error('No analysis results to export');
       return;
     }
+
+    const clientName = selectedShopifyClient 
+      ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'SelectedClient'
+      : 'Default';
 
     const csvContent = [
       ['Influencer Name', 'Email', 'Instagram Handle', 'Category', 'Total Spent', 'Order Count', 'Average Order Value', 'First Order', 'Last Order'].join(','),
@@ -229,7 +288,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `influencer-spending-analysis-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `influencer-spending-analysis-${clientName}-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -257,6 +316,23 @@ const InfluencerSpendingAnalysisFromCSV = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="analysis-client">Shopify Client for Analysis</Label>
+            <Select value={selectedShopifyClient} onValueChange={setSelectedShopifyClient}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a Shopify client or leave blank for default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Default (No specific client)</SelectItem>
+                {shopifyClients?.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.client_name} ({client.shopify_url})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex gap-2">
             <Button 
               onClick={handleAnalyze}

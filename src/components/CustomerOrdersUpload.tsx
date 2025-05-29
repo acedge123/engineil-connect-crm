@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { Upload, FileText, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 type CustomerOrder = {
@@ -20,7 +21,14 @@ type CustomerOrder = {
   order_id: string;
   order_total: number;
   order_date: string;
+  shopify_client_id?: string;
   created_at: string;
+};
+
+type ShopifyClient = {
+  id: string;
+  client_name: string;
+  shopify_url: string;
 };
 
 const CustomerOrdersUpload = () => {
@@ -28,6 +36,25 @@ const CustomerOrdersUpload = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('');
+
+  // Fetch Shopify clients
+  const { data: shopifyClients } = useQuery({
+    queryKey: ['shopify-clients'],
+    queryFn: async () => {
+      if (!user) throw new Error('User not authenticated');
+      
+      const { data, error } = await supabase
+        .from('shopify_clients')
+        .select('id, client_name, shopify_url')
+        .eq('user_id', user.id)
+        .order('client_name');
+
+      if (error) throw error;
+      return data as ShopifyClient[];
+    },
+    enabled: !!user,
+  });
 
   // CSV upload mutation
   const uploadCsvMutation = useMutation({
@@ -58,7 +85,10 @@ const CustomerOrdersUpload = () => {
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          const order: any = { user_id: user.id };
+          const order: any = { 
+            user_id: user.id,
+            shopify_client_id: selectedShopifyClient || null
+          };
           
           headers.forEach((header, index) => {
             const value = values[index];
@@ -112,11 +142,19 @@ const CustomerOrdersUpload = () => {
           throw new Error('No valid customer data found in Shopify CSV. Make sure customers have spent money.');
         }
 
-        // Delete existing orders for this user first
-        const { error: deleteError } = await supabase
+        // Delete existing orders for this user and client combination first
+        let deleteQuery = supabase
           .from('customer_orders')
           .delete()
           .eq('user_id', user.id);
+
+        if (selectedShopifyClient) {
+          deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
+        } else {
+          deleteQuery = deleteQuery.is('shopify_client_id', null);
+        }
+
+        const { error: deleteError } = await deleteQuery;
 
         if (deleteError) {
           console.log('Warning: Failed to delete previous orders:', deleteError.message);
@@ -141,7 +179,10 @@ const CustomerOrdersUpload = () => {
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          const order: any = { user_id: user.id };
+          const order: any = { 
+            user_id: user.id,
+            shopify_client_id: selectedShopifyClient || null
+          };
           
           headers.forEach((header, index) => {
             const value = values[index];
@@ -175,11 +216,19 @@ const CustomerOrdersUpload = () => {
           throw new Error('No valid order data found in CSV');
         }
 
-        // Delete existing orders for this user first
-        const { error: deleteError } = await supabase
+        // Delete existing orders for this user and client combination first
+        let deleteQuery = supabase
           .from('customer_orders')
           .delete()
           .eq('user_id', user.id);
+
+        if (selectedShopifyClient) {
+          deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
+        } else {
+          deleteQuery = deleteQuery.is('shopify_client_id', null);
+        }
+
+        const { error: deleteError } = await deleteQuery;
 
         if (deleteError) {
           console.log('Warning: Failed to delete previous orders:', deleteError.message);
@@ -198,7 +247,9 @@ const CustomerOrdersUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
       setIsDialogOpen(false);
       setCsvFile(null);
-      toast.success(`Successfully uploaded ${data.length} customer records`);
+      setSelectedShopifyClient('');
+      const clientName = shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'default';
+      toast.success(`Successfully uploaded ${data.length} customer records for ${clientName}`);
     },
     onError: (error) => {
       toast.error(`Failed to upload CSV: ${error.message}`);
@@ -257,6 +308,22 @@ const CustomerOrdersUpload = () => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <div>
+                <Label htmlFor="shopify-client">Shopify Client (Optional)</Label>
+                <Select value={selectedShopifyClient} onValueChange={setSelectedShopifyClient}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a Shopify client or leave blank for default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No specific client (Default)</SelectItem>
+                    {shopifyClients?.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.client_name} ({client.shopify_url})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label htmlFor="csv-file">CSV File</Label>
                 <Input
