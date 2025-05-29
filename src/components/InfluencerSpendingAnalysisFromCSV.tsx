@@ -49,7 +49,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       if (!user) throw new Error('User not authenticated');
       
       const { data, error } = await supabase
-        .from('customer_orders')
+        .from('customer_orders' as any)
         .select('*')
         .eq('user_id', user.id)
         .order('order_date', { ascending: false });
