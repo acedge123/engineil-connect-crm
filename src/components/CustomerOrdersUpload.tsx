@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
-type CustomerOrderInsert = {
+interface CustomerOrderInsert {
   user_id: string;
   customer_email: string;
   customer_name?: string;
@@ -21,13 +21,13 @@ type CustomerOrderInsert = {
   order_total: number;
   order_date: string;
   shopify_client_id?: string;
-};
+}
 
-type ShopifyClient = {
+interface ShopifyClient {
   id: string;
   client_name: string;
   shopify_url: string;
-};
+}
 
 const CustomerOrdersUpload = () => {
   const { user } = useAuth();
@@ -91,8 +91,12 @@ const CustomerOrdersUpload = () => {
             order_id: '',
             order_total: 0,
             order_date: new Date().toISOString().split('T')[0],
-            shopify_client_id: selectedShopifyClient || undefined
           };
+
+          // Only add shopify_client_id if a specific client is selected
+          if (selectedShopifyClient && selectedShopifyClient !== 'default') {
+            order.shopify_client_id = selectedShopifyClient;
+          }
 
           let firstName = '';
           let lastName = '';
@@ -145,7 +149,7 @@ const CustomerOrdersUpload = () => {
           .delete()
           .eq('user_id', user.id);
 
-        if (selectedShopifyClient) {
+        if (selectedShopifyClient && selectedShopifyClient !== 'default') {
           deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
         } else {
           deleteQuery = deleteQuery.is('shopify_client_id', null);
@@ -183,8 +187,12 @@ const CustomerOrdersUpload = () => {
             order_id: '',
             order_total: 0,
             order_date: '',
-            shopify_client_id: selectedShopifyClient || undefined
           };
+
+          // Only add shopify_client_id if a specific client is selected
+          if (selectedShopifyClient && selectedShopifyClient !== 'default') {
+            order.shopify_client_id = selectedShopifyClient;
+          }
           
           headers.forEach((header, index) => {
             const value = values[index];
@@ -224,7 +232,7 @@ const CustomerOrdersUpload = () => {
           .delete()
           .eq('user_id', user.id);
 
-        if (selectedShopifyClient) {
+        if (selectedShopifyClient && selectedShopifyClient !== 'default') {
           deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
         } else {
           deleteQuery = deleteQuery.is('shopify_client_id', null);
@@ -250,7 +258,9 @@ const CustomerOrdersUpload = () => {
       setIsDialogOpen(false);
       setCsvFile(null);
       setSelectedShopifyClient('');
-      const clientName = shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'default';
+      const clientName = selectedShopifyClient && selectedShopifyClient !== 'default' 
+        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'selected client'
+        : 'default';
       toast.success(`Successfully uploaded ${data.length} customer records for ${clientName}`);
     },
     onError: (error) => {
@@ -317,7 +327,7 @@ const CustomerOrdersUpload = () => {
                     <SelectValue placeholder="Select a Shopify client or leave blank for default" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="no-client">No specific client (Default)</SelectItem>
+                    <SelectItem value="default">No specific client (Default)</SelectItem>
                     {shopifyClients?.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.client_name} ({client.shopify_url})
