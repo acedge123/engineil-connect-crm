@@ -34,7 +34,7 @@ const CustomerOrdersUpload = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('');
+  const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
 
   // Fetch Shopify clients
   const { data: shopifyClients } = useQuery({
@@ -144,11 +144,6 @@ const CustomerOrdersUpload = () => {
         }
 
         // Delete existing orders for this user and client combination first
-        const deleteParams = { user_id: user.id };
-        const deleteFilter = selectedShopifyClient && selectedShopifyClient !== 'default' 
-          ? { ...deleteParams, shopify_client_id: selectedShopifyClient }
-          : deleteParams;
-
         if (selectedShopifyClient && selectedShopifyClient !== 'default') {
           const { error: deleteError } = await supabase
             .from('customer_orders')
@@ -272,7 +267,7 @@ const CustomerOrdersUpload = () => {
       queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
       setIsDialogOpen(false);
       setCsvFile(null);
-      setSelectedShopifyClient('');
+      setSelectedShopifyClient('default');
       const clientName = selectedShopifyClient && selectedShopifyClient !== 'default' 
         ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'selected client'
         : 'default';
