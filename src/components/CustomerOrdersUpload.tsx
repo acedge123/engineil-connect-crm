@@ -86,10 +86,16 @@ const CustomerOrdersUpload = () => {
             }
           });
 
-          // Combine first and last name for customer_name
-          if (order.customer_first_name || order.customer_last_name) {
-            order.customer_name = `${order.customer_first_name || ''} ${order.customer_last_name || ''}`.trim();
+          // Combine first and last name for customer_name only if they exist
+          const firstName = order.customer_first_name || '';
+          const lastName = order.customer_last_name || '';
+          if (firstName || lastName) {
+            order.customer_name = `${firstName} ${lastName}`.trim();
           }
+
+          // Clean up temporary fields
+          delete order.customer_first_name;
+          delete order.customer_last_name;
 
           // Set a default order date since Shopify customer export doesn't include individual order dates
           order.order_date = new Date().toISOString().split('T')[0];
@@ -245,7 +251,7 @@ const CustomerOrdersUpload = () => {
                 <br /><br />
                 <strong>Shopify Export Format:</strong>
                 <br />
-                Email, First Name, Last Name, Total Spent, Total Orders, Customer ID
+                Email, Total Spent (required). Optional: First Name, Last Name, Total Orders, Customer ID
                 <br />
                 <strong>Custom Format:</strong>
                 <br />
