@@ -41,75 +41,160 @@ const CustomerOrdersUpload = () => {
         throw new Error('CSV file must contain at least a header and one data row');
       }
 
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      const requiredHeaders = ['customer_email', 'order_id', 'order_total', 'order_date'];
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
       
-      const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
-      if (missingHeaders.length > 0) {
-        throw new Error(`CSV must contain the following columns: ${missingHeaders.join(', ')}`);
-      }
-
-      const ordersToInsert = [];
+      // Check for Shopify format (requires Email and Total Spent)
+      const isShopifyFormat = headers.includes('email') && headers.includes('total spent');
       
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-        const order: any = { user_id: user.id };
-        
-        headers.forEach((header, index) => {
-          const value = values[index];
-          if (value) {
-            switch (header) {
-              case 'customer_email':
-                order.customer_email = value.toLowerCase().trim();
-                break;
-              case 'customer_name':
-                order.customer_name = value;
-                break;
-              case 'order_id':
-                order.order_id = value;
-                break;
-              case 'order_total':
-                order.order_total = parseFloat(value) || 0;
-                break;
-              case 'order_date':
-                order.order_date = value;
-                break;
-            }
-          }
-        });
-
-        if (order.customer_email && order.order_id && order.order_total && order.order_date) {
-          ordersToInsert.push(order);
+      if (isShopifyFormat) {
+        // Shopify format processing
+        const requiredHeaders = ['email', 'total spent'];
+        const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
+        if (missingHeaders.length > 0) {
+          throw new Error(`Shopify CSV must contain the following columns: ${missingHeaders.join(', ')}`);
         }
+
+        const ordersToInsert = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          const order: any = { user_id: user.id };
+          
+          headers.forEach((header, index) => {
+            const value = values[index];
+            if (value) {
+              switch (header) {
+                case 'email':
+                  order.customer_email = value.toLowerCase().trim();
+                  break;
+                case 'first name':
+                  order.customer_first_name = value;
+                  break;
+                case 'last name':
+                  order.customer_last_name = value;
+                  break;
+                case 'customer id':
+                  order.order_id = `SHOPIFY-${value}`;
+                  break;
+                case 'total spent':
+                  order.order_total = parseFloat(value) || 0;
+                  break;
+                case 'total orders':
+                  order.order_count = parseInt(value) || 1;
+                  break;
+              }
+            }
+          });
+
+          // Combine first and last name for customer_name
+          if (order.customer_first_name || order.customer_last_name) {
+            order.customer_name = `${order.customer_first_name || ''} ${order.customer_last_name || ''}`.trim();
+          }
+
+          // Set a default order date since Shopify customer export doesn't include individual order dates
+          order.order_date = new Date().toISOString().split('T')[0];
+
+          // Ensure we have required fields
+          if (order.customer_email && order.order_total > 0) {
+            // If no order_id from customer_id, generate one
+            if (!order.order_id) {
+              order.order_id = `SHOPIFY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            }
+            ordersToInsert.push(order);
+          }
+        }
+
+        if (ordersToInsert.length === 0) {
+          throw new Error('No valid customer data found in Shopify CSV. Make sure customers have spent money.');
+        }
+
+        // Delete existing orders for this user first
+        const { error: deleteError } = await supabase
+          .from('customer_orders')
+          .delete()
+          .eq('user_id', user.id);
+
+        if (deleteError) {
+          console.log('Warning: Failed to delete previous orders:', deleteError.message);
+        }
+
+        const { data, error } = await supabase
+          .from('customer_orders')
+          .insert(ordersToInsert)
+          .select();
+
+        if (error) throw error;
+        return data;
+      } else {
+        // Original custom format processing
+        const requiredHeaders = ['customer_email', 'order_id', 'order_total', 'order_date'];
+        const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
+        if (missingHeaders.length > 0) {
+          throw new Error(`Custom CSV must contain the following columns: ${missingHeaders.join(', ')}`);
+        }
+
+        const ordersToInsert = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          const order: any = { user_id: user.id };
+          
+          headers.forEach((header, index) => {
+            const value = values[index];
+            if (value) {
+              switch (header) {
+                case 'customer_email':
+                  order.customer_email = value.toLowerCase().trim();
+                  break;
+                case 'customer_name':
+                  order.customer_name = value;
+                  break;
+                case 'order_id':
+                  order.order_id = value;
+                  break;
+                case 'order_total':
+                  order.order_total = parseFloat(value) || 0;
+                  break;
+                case 'order_date':
+                  order.order_date = value;
+                  break;
+              }
+            }
+          });
+
+          if (order.customer_email && order.order_id && order.order_total && order.order_date) {
+            ordersToInsert.push(order);
+          }
+        }
+
+        if (ordersToInsert.length === 0) {
+          throw new Error('No valid order data found in CSV');
+        }
+
+        // Delete existing orders for this user first
+        const { error: deleteError } = await supabase
+          .from('customer_orders')
+          .delete()
+          .eq('user_id', user.id);
+
+        if (deleteError) {
+          console.log('Warning: Failed to delete previous orders:', deleteError.message);
+        }
+
+        const { data, error } = await supabase
+          .from('customer_orders')
+          .insert(ordersToInsert)
+          .select();
+
+        if (error) throw error;
+        return data;
       }
-
-      if (ordersToInsert.length === 0) {
-        throw new Error('No valid order data found in CSV');
-      }
-
-      // Delete existing orders for this user first
-      const { error: deleteError } = await supabase
-        .from('customer_orders')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (deleteError) {
-        console.log('Warning: Failed to delete previous orders:', deleteError.message);
-      }
-
-      const { data, error } = await supabase
-        .from('customer_orders')
-        .insert(ordersToInsert)
-        .select();
-
-      if (error) throw error;
-      return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
       setIsDialogOpen(false);
       setCsvFile(null);
-      toast.success(`Successfully uploaded ${data.length} customer orders`);
+      toast.success(`Successfully uploaded ${data.length} customer records`);
     },
     onError: (error) => {
       toast.error(`Failed to upload CSV: ${error.message}`);
@@ -129,17 +214,19 @@ const CustomerOrdersUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="w-5 h-5" />
-          Customer Orders Data
+          Customer Data Upload
         </CardTitle>
         <CardDescription>
-          Upload customer order data to analyze influencer spending patterns
+          Upload customer data from Shopify export or custom CSV format
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Alert className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            CSV format required: customer_email, order_id, order_total, order_date. Optional: customer_name
+            <strong>Shopify Format:</strong> Export customers from Shopify Admin. Required columns: Email, Total Spent. Optional: First Name, Last Name, Customer ID, Total Orders.
+            <br />
+            <strong>Custom Format:</strong> customer_email, order_id, order_total, order_date. Optional: customer_name
           </AlertDescription>
         </Alert>
         
@@ -147,20 +234,22 @@ const CustomerOrdersUpload = () => {
           <DialogTrigger asChild>
             <Button className="bg-crm-blue hover:bg-blue-600">
               <Upload className="w-4 h-4 mr-2" />
-              Upload Customer Orders CSV
+              Upload Customer Data CSV
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Upload Customer Orders CSV</DialogTitle>
+              <DialogTitle>Upload Customer Data CSV</DialogTitle>
               <DialogDescription>
-                Upload a CSV file with customer order data. Required columns: customer_email, order_id, order_total, order_date. Optional: customer_name.
+                Upload a CSV file with customer data. The system will automatically detect the format.
                 <br /><br />
-                Example format:
+                <strong>Shopify Export Format:</strong>
                 <br />
-                customer_email,customer_name,order_id,order_total,order_date
+                Email, First Name, Last Name, Total Spent, Total Orders, Customer ID
                 <br />
-                john@example.com,John Doe,12345,99.99,2024-01-15
+                <strong>Custom Format:</strong>
+                <br />
+                customer_email, customer_name, order_id, order_total, order_date
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
