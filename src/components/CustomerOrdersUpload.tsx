@@ -144,21 +144,31 @@ const CustomerOrdersUpload = () => {
         }
 
         // Delete existing orders for this user and client combination first
-        let deleteQuery = supabase
-          .from('customer_orders')
-          .delete()
-          .eq('user_id', user.id);
+        const deleteParams = { user_id: user.id };
+        const deleteFilter = selectedShopifyClient && selectedShopifyClient !== 'default' 
+          ? { ...deleteParams, shopify_client_id: selectedShopifyClient }
+          : deleteParams;
 
         if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-          deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
+          const { error: deleteError } = await supabase
+            .from('customer_orders')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('shopify_client_id', selectedShopifyClient);
+
+          if (deleteError) {
+            console.log('Warning: Failed to delete previous orders:', deleteError.message);
+          }
         } else {
-          deleteQuery = deleteQuery.is('shopify_client_id', null);
-        }
+          const { error: deleteError } = await supabase
+            .from('customer_orders')
+            .delete()
+            .eq('user_id', user.id)
+            .is('shopify_client_id', null);
 
-        const { error: deleteError } = await deleteQuery;
-
-        if (deleteError) {
-          console.log('Warning: Failed to delete previous orders:', deleteError.message);
+          if (deleteError) {
+            console.log('Warning: Failed to delete previous orders:', deleteError.message);
+          }
         }
 
         const { data, error } = await supabase
@@ -227,21 +237,26 @@ const CustomerOrdersUpload = () => {
         }
 
         // Delete existing orders for this user and client combination first
-        let deleteQuery = supabase
-          .from('customer_orders')
-          .delete()
-          .eq('user_id', user.id);
-
         if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-          deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
+          const { error: deleteError } = await supabase
+            .from('customer_orders')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('shopify_client_id', selectedShopifyClient);
+
+          if (deleteError) {
+            console.log('Warning: Failed to delete previous orders:', deleteError.message);
+          }
         } else {
-          deleteQuery = deleteQuery.is('shopify_client_id', null);
-        }
+          const { error: deleteError } = await supabase
+            .from('customer_orders')
+            .delete()
+            .eq('user_id', user.id)
+            .is('shopify_client_id', null);
 
-        const { error: deleteError } = await deleteQuery;
-
-        if (deleteError) {
-          console.log('Warning: Failed to delete previous orders:', deleteError.message);
+          if (deleteError) {
+            console.log('Warning: Failed to delete previous orders:', deleteError.message);
+          }
         }
 
         const { data, error } = await supabase
