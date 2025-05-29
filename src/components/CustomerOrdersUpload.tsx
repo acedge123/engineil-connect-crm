@@ -13,8 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
-type CustomerOrder = {
-  id: string;
+type CustomerOrderInsert = {
   user_id: string;
   customer_email: string;
   customer_name?: string;
@@ -22,7 +21,6 @@ type CustomerOrder = {
   order_total: number;
   order_date: string;
   shopify_client_id?: string;
-  created_at: string;
 };
 
 type ShopifyClient = {
@@ -81,14 +79,23 @@ const CustomerOrdersUpload = () => {
           throw new Error(`Shopify CSV must contain the following columns: ${missingHeaders.join(', ')}`);
         }
 
-        const ordersToInsert = [];
+        const ordersToInsert: CustomerOrderInsert[] = [];
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          const order: any = { 
+          
+          // Initialize order with required fields
+          const order: CustomerOrderInsert = {
             user_id: user.id,
-            shopify_client_id: selectedShopifyClient || null
+            customer_email: '',
+            order_id: '',
+            order_total: 0,
+            order_date: new Date().toISOString().split('T')[0],
+            shopify_client_id: selectedShopifyClient || undefined
           };
+
+          let firstName = '';
+          let lastName = '';
           
           headers.forEach((header, index) => {
             const value = values[index];
@@ -98,10 +105,10 @@ const CustomerOrdersUpload = () => {
                   order.customer_email = value.toLowerCase().trim();
                   break;
                 case 'first name':
-                  order.customer_first_name = value;
+                  firstName = value;
                   break;
                 case 'last name':
-                  order.customer_last_name = value;
+                  lastName = value;
                   break;
                 case 'customer id':
                   order.order_id = `SHOPIFY-${value}`;
@@ -109,24 +116,14 @@ const CustomerOrdersUpload = () => {
                 case 'total spent':
                   order.order_total = parseFloat(value) || 0;
                   break;
-                // Remove the 'total orders' case since order_count doesn't exist in the database
               }
             }
           });
 
           // Combine first and last name for customer_name only if they exist
-          const firstName = order.customer_first_name || '';
-          const lastName = order.customer_last_name || '';
           if (firstName || lastName) {
             order.customer_name = `${firstName} ${lastName}`.trim();
           }
-
-          // Clean up temporary fields
-          delete order.customer_first_name;
-          delete order.customer_last_name;
-
-          // Set a default order date since Shopify customer export doesn't include individual order dates
-          order.order_date = new Date().toISOString().split('T')[0];
 
           // Ensure we have required fields
           if (order.customer_email && order.order_total > 0) {
@@ -175,13 +172,18 @@ const CustomerOrdersUpload = () => {
           throw new Error(`Custom CSV must contain the following columns: ${missingHeaders.join(', ')}`);
         }
 
-        const ordersToInsert = [];
+        const ordersToInsert: CustomerOrderInsert[] = [];
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          const order: any = { 
+          
+          const order: CustomerOrderInsert = {
             user_id: user.id,
-            shopify_client_id: selectedShopifyClient || null
+            customer_email: '',
+            order_id: '',
+            order_total: 0,
+            order_date: '',
+            shopify_client_id: selectedShopifyClient || undefined
           };
           
           headers.forEach((header, index) => {
@@ -315,7 +317,7 @@ const CustomerOrdersUpload = () => {
                     <SelectValue placeholder="Select a Shopify client or leave blank for default" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No specific client (Default)</SelectItem>
+                    <SelectItem value="no-client">No specific client (Default)</SelectItem>
                     {shopifyClients?.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.client_name} ({client.shopify_url})
