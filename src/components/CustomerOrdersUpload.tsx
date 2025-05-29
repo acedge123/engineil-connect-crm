@@ -79,9 +79,7 @@ const CustomerOrdersUpload = () => {
                 case 'total spent':
                   order.order_total = parseFloat(value) || 0;
                   break;
-                case 'total orders':
-                  order.order_count = parseInt(value) || 1;
-                  break;
+                // Remove the 'total orders' case since order_count doesn't exist in the database
               }
             }
           });
@@ -230,7 +228,7 @@ const CustomerOrdersUpload = () => {
         <Alert className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            <strong>Shopify Format:</strong> Export customers from Shopify Admin. Required columns: Email, Total Spent. Optional: First Name, Last Name, Customer ID, Total Orders.
+            <strong>Shopify Format:</strong> Export customers from Shopify Admin. Required columns: Email, Total Spent. Optional: First Name, Last Name, Customer ID.
             <br />
             <strong>Custom Format:</strong> customer_email, order_id, order_total, order_date. Optional: customer_name
           </AlertDescription>
@@ -251,7 +249,7 @@ const CustomerOrdersUpload = () => {
                 <br /><br />
                 <strong>Shopify Export Format:</strong>
                 <br />
-                Email, Total Spent (required). Optional: First Name, Last Name, Total Orders, Customer ID
+                Email, Total Spent (required). Optional: First Name, Last Name, Customer ID
                 <br />
                 <strong>Custom Format:</strong>
                 <br />
