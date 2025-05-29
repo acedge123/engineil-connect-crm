@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Upload, FileText, Users, TrendingUp, Edit, Trash2, BarChart3 } from 'lucide-react';
@@ -12,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import InfluencerSpendingAnalysis from '@/components/InfluencerSpendingAnalysis';
+import InfluencerSpendingAnalysisFromCSV from '@/components/InfluencerSpendingAnalysisFromCSV';
 
 type Influencer = {
   id: string;
@@ -35,7 +36,6 @@ const Influencers = () => {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [editingInfluencer, setEditingInfluencer] = useState<Influencer | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     name: '',
@@ -277,7 +277,7 @@ const Influencers = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Influencers</h1>
-          <p className="text-gray-600 mt-2">Manage your influencer database and track their performance</p>
+          <p className="text-gray-600 mt-2">Manage your influencer database and analyze their spending patterns</p>
         </div>
       </div>
 
@@ -590,7 +590,7 @@ const Influencers = () => {
         </TabsContent>
 
         <TabsContent value="analysis">
-          <InfluencerSpendingAnalysis />
+          <InfluencerSpendingAnalysisFromCSV />
         </TabsContent>
       </Tabs>
     </div>

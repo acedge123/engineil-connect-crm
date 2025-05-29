@@ -13,7 +13,8 @@ import {
   Building,
   Bell,
   ShoppingBag,
-  BarChart3
+  BarChart3,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,7 @@ const DashboardLayout: React.FC = () => {
     { to: '/tasks', label: 'Tasks', icon: <ListTodo className="w-5 h-5" /> },
     { to: '/shopify', label: 'Shopify Clients', icon: <ShoppingBag className="w-5 h-5" /> },
     { to: '/shopify-reports', label: 'Shopify Reports', icon: <BarChart3 className="w-5 h-5" /> },
+    { to: '/influencers', label: 'Influencers', icon: <UserCheck className="w-5 h-5" /> },
   ];
 
   if (isAdmin) {
