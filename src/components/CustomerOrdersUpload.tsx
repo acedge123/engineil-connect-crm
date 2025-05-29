@@ -89,7 +89,7 @@ const CustomerOrdersUpload = () => {
 
       // Delete existing orders for this user first
       const { error: deleteError } = await supabase
-        .from('customer_orders' as any)
+        .from('customer_orders')
         .delete()
         .eq('user_id', user.id);
 
@@ -98,7 +98,7 @@ const CustomerOrdersUpload = () => {
       }
 
       const { data, error } = await supabase
-        .from('customer_orders' as any)
+        .from('customer_orders')
         .insert(ordersToInsert)
         .select();
 
