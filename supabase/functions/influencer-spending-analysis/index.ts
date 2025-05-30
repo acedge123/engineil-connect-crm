@@ -56,17 +56,38 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Processing for user: ${user.id}`);
 
-    // Fetch ALL influencers for the user
-    const { data: influencers, error: influencersError } = await supabaseClient
-      .from('influencers')
-      .select('id, email, name, instagram_handle, category')
-      .eq('user_id', user.id);
+    // Fetch ALL influencers for the user in batches
+    let allInfluencers: any[] = [];
+    let offset = 0;
+    const batchSize = 1000;
+    let hasMore = true;
 
-    if (influencersError) {
-      throw new Error(`Failed to fetch influencers: ${influencersError.message}`);
+    while (hasMore) {
+      const { data: influencerBatch, error: influencersError } = await supabaseClient
+        .from('influencers')
+        .select('id, email, name, instagram_handle, category')
+        .eq('user_id', user.id)
+        .range(offset, offset + batchSize - 1);
+
+      if (influencersError) {
+        throw new Error(`Failed to fetch influencers: ${influencersError.message}`);
+      }
+
+      if (influencerBatch && influencerBatch.length > 0) {
+        allInfluencers = allInfluencers.concat(influencerBatch);
+        console.log(`Fetched batch: ${influencerBatch.length} influencers (total so far: ${allInfluencers.length})`);
+        
+        if (influencerBatch.length < batchSize) {
+          hasMore = false;
+        } else {
+          offset += batchSize;
+        }
+      } else {
+        hasMore = false;
+      }
     }
 
-    console.log(`Fetched ${influencers?.length || 0} influencers`);
+    console.log(`Successfully fetched ALL ${allInfluencers.length} influencers`);
 
     // Fetch customer orders based on shopify_client_id
     let ordersQuery = supabaseClient
@@ -88,8 +109,16 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Fetched ${customerOrders?.length || 0} customer orders`);
 
-    if (!influencers || !customerOrders) {
-      return new Response(JSON.stringify([]), {
+    if (!allInfluencers || !customerOrders) {
+      return new Response(JSON.stringify({
+        results: [],
+        summary: {
+          total_influencers: allInfluencers?.length || 0,
+          matched_influencers: 0,
+          total_spending: 0,
+          total_orders: customerOrders?.length || 0
+        }
+      }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
@@ -113,7 +142,7 @@ const handler = async (req: Request): Promise<Response> => {
     let matchedInfluencers = 0;
     let totalMatchedSpending = 0;
 
-    for (const influencer of influencers) {
+    for (const influencer of allInfluencers) {
       const normalizedInfluencerEmail = influencer.email.toLowerCase().trim();
       const influencerOrders = ordersByEmail.get(normalizedInfluencerEmail) || [];
 
@@ -180,9 +209,10 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     console.log(`=== BACKEND ANALYSIS RESULTS ===`);
-    console.log(`Total influencers processed: ${influencers.length}`);
+    console.log(`Total influencers processed: ${allInfluencers.length}`);
     console.log(`Matched influencers with orders: ${matchedInfluencers}`);
     console.log(`Total matched spending: $${totalMatchedSpending.toFixed(2)}`);
+    console.log(`Total customer orders available: ${customerOrders.length}`);
     console.log(`Expected matches: 1772 influencers`);
     console.log(`=== BACKEND ANALYSIS END ===`);
 
@@ -228,7 +258,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(JSON.stringify({
       results,
       summary: {
-        total_influencers: influencers.length,
+        total_influencers: allInfluencers.length,
         matched_influencers: matchedInfluencers,
         total_spending: totalMatchedSpending,
         total_orders: customerOrders.length
