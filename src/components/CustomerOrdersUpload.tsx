@@ -55,115 +55,118 @@ const CustomerOrdersUpload = () => {
 
   const shopifyClients = shopifyClientsQuery.data;
 
-  // Simplified CSV upload mutation
-  const uploadCsvMutation = useMutation({
-    mutationFn: async (file: File) => {
-      if (!user) throw new Error('User not authenticated');
+  // Define mutation function separately to avoid type inference issues
+  const uploadCsvFile = async (file: File): Promise<CustomerOrderInsert[]> => {
+    if (!user) throw new Error('User not authenticated');
 
-      const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim());
-      
-      if (lines.length < 2) {
-        throw new Error('CSV file must contain at least a header and one data row');
-      }
+    const text = await file.text();
+    const lines = text.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      throw new Error('CSV file must contain at least a header and one data row');
+    }
 
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
-      
-      console.log('CSV Headers found:', headers);
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    
+    console.log('CSV Headers found:', headers);
 
-      // Check if we have required Shopify headers
-      const requiredShopifyHeaders = ['email'];
-      const hasRequiredHeaders = requiredShopifyHeaders.some(header => 
-        headers.includes(header.toLowerCase())
-      );
-      
-      if (!hasRequiredHeaders) {
-        throw new Error('CSV must contain at least an "Email" column for Shopify customer data');
-      }
+    // Check if we have required Shopify headers
+    const requiredShopifyHeaders = ['email'];
+    const hasRequiredHeaders = requiredShopifyHeaders.some(header => 
+      headers.includes(header.toLowerCase())
+    );
+    
+    if (!hasRequiredHeaders) {
+      throw new Error('CSV must contain at least an "Email" column for Shopify customer data');
+    }
 
-      const ordersToInsert: CustomerOrderInsert[] = [];
+    const ordersToInsert: CustomerOrderInsert[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/['"]/g, ''));
+      const order: Partial<CustomerOrderInsert> = { user_id: user.id };
       
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/['"]/g, ''));
-        const order: Partial<CustomerOrderInsert> = { user_id: user.id };
-        
-        headers.forEach((header, index) => {
-          const value = values[index];
-          if (value && value.trim()) {
-            switch (header) {
-              case 'email':
-                order.customer_email = value;
-                break;
-              case 'first name':
+      headers.forEach((header, index) => {
+        const value = values[index];
+        if (value && value.trim()) {
+          switch (header) {
+            case 'email':
+              order.customer_email = value;
+              break;
+            case 'first name':
+              order.customer_name = value;
+              break;
+            case 'last name':
+              if (order.customer_name) {
+                order.customer_name += ` ${value}`;
+              } else {
                 order.customer_name = value;
-                break;
-              case 'last name':
-                if (order.customer_name) {
-                  order.customer_name += ` ${value}`;
-                } else {
-                  order.customer_name = value;
-                }
-                break;
-              case 'customer id':
-                order.order_id = value;
-                break;
-              case 'total spent':
-                const totalSpent = parseFloat(value.replace(/[$,]/g, ''));
-                if (!isNaN(totalSpent)) {
-                  order.order_total = totalSpent;
-                }
-                break;
-            }
+              }
+              break;
+            case 'customer id':
+              order.order_id = value;
+              break;
+            case 'total spent':
+              const totalSpent = parseFloat(value.replace(/[$,]/g, ''));
+              if (!isNaN(totalSpent)) {
+                order.order_total = totalSpent;
+              }
+              break;
           }
-        });
-
-        // For Shopify customer data, we'll create synthetic order data
-        if (order.customer_email) {
-          if (!order.order_id) {
-            order.order_id = `CUST-${Date.now()}-${i}`;
-          }
-          if (!order.order_total) {
-            order.order_total = 0;
-          }
-          if (!order.order_date) {
-            order.order_date = new Date().toISOString().split('T')[0];
-          }
-          
-          if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-            order.shopify_client_id = selectedShopifyClient;
-          }
-          ordersToInsert.push(order as CustomerOrderInsert);
         }
+      });
+
+      // For Shopify customer data, we'll create synthetic order data
+      if (order.customer_email) {
+        if (!order.order_id) {
+          order.order_id = `CUST-${Date.now()}-${i}`;
+        }
+        if (!order.order_total) {
+          order.order_total = 0;
+        }
+        if (!order.order_date) {
+          order.order_date = new Date().toISOString().split('T')[0];
+        }
+        
+        if (selectedShopifyClient && selectedShopifyClient !== 'default') {
+          order.shopify_client_id = selectedShopifyClient;
+        }
+        ordersToInsert.push(order as CustomerOrderInsert);
       }
+    }
 
-      if (ordersToInsert.length === 0) {
-        throw new Error('No valid customer data found in CSV');
-      }
+    if (ordersToInsert.length === 0) {
+      throw new Error('No valid customer data found in CSV');
+    }
 
-      console.log('Processing', ordersToInsert.length, 'customer records');
+    console.log('Processing', ordersToInsert.length, 'customer records');
 
-      // Delete existing orders for this client first
-      let deleteQuery = supabase
-        .from('customer_orders')
-        .delete()
-        .eq('user_id', user.id);
+    // Delete existing orders for this client first
+    let deleteQuery = supabase
+      .from('customer_orders')
+      .delete()
+      .eq('user_id', user.id);
 
-      if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-        deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
-      } else {
-        deleteQuery = deleteQuery.is('shopify_client_id', null);
-      }
+    if (selectedShopifyClient && selectedShopifyClient !== 'default') {
+      deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
+    } else {
+      deleteQuery = deleteQuery.is('shopify_client_id', null);
+    }
 
-      await deleteQuery;
+    await deleteQuery;
 
-      const { data, error } = await supabase
-        .from('customer_orders')
-        .insert(ordersToInsert)
-        .select();
+    const { data, error } = await supabase
+      .from('customer_orders')
+      .insert(ordersToInsert)
+      .select();
 
-      if (error) throw error;
-      return data || [];
-    },
+    if (error) throw error;
+    return data as CustomerOrderInsert[];
+  };
+
+  // Simplified CSV upload mutation with explicit typing
+  const uploadCsvMutation = useMutation<CustomerOrderInsert[], Error, File>({
+    mutationFn: uploadCsvFile,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
       setIsUploadDialogOpen(false);
