@@ -1,8 +1,7 @@
 
 import React from 'react';
-import { Play, Download } from 'lucide-react';
+import { Play, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 import { InfluencerSpendingResult } from '@/hooks/useInfluencerAnalysis';
 
 type ShopifyClient = {
@@ -23,68 +22,46 @@ interface AnalysisControlsProps {
 const AnalysisControls: React.FC<AnalysisControlsProps> = ({
   onAnalyze,
   isAnalyzing,
-  isOrdersLoading,
   analysisResults,
   selectedShopifyClient,
-  shopifyClients
+  shopifyClients,
 }) => {
-  const exportResults = () => {
-    if (analysisResults.length === 0) {
-      toast.error('No analysis results to export');
-      return;
-    }
-
-    const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
-      ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'SelectedClient'
-      : 'Default';
-
-    const csvContent = [
-      ['Influencer Name', 'Email', 'Instagram Handle', 'Category', 'Total Spent', 'Order Count', 'Average Order Value', 'First Order', 'Last Order'].join(','),
-      ...analysisResults
-        .filter(result => result.total_spent > 0)
-        .map(result => [
-          result.influencer?.name || '',
-          result.customer_email,
-          result.influencer?.instagram_handle || '',
-          result.influencer?.category || '',
-          result.total_spent.toFixed(2),
-          result.order_count,
-          result.average_order_value.toFixed(2),
-          result.first_order_date ? new Date(result.first_order_date).toLocaleDateString() : '',
-          result.last_order_date ? new Date(result.last_order_date).toLocaleDateString() : ''
-        ].join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `influencer-spending-analysis-${clientName}-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
+  const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
+    ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
+    : 'Default Client';
 
   return (
-    <div className="flex gap-2">
-      <Button 
-        onClick={onAnalyze}
-        disabled={isAnalyzing || isOrdersLoading}
-        className="bg-crm-blue hover:bg-blue-600"
-      >
-        <Play className="w-4 h-4 mr-2" />
-        {isAnalyzing ? 'Analyzing...' : 'Run Analysis'}
-      </Button>
-      
-      {analysisResults.length > 0 && (
-        <Button 
-          onClick={exportResults}
-          variant="outline"
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">Analysis Controls</h3>
+          <p className="text-sm text-gray-600">
+            Run backend analysis to match influencer emails with customer orders
+          </p>
+        </div>
+        <Button
+          onClick={onAnalyze}
+          disabled={isAnalyzing}
+          className="bg-blue-600 hover:bg-blue-700"
         >
-          <Download className="w-4 h-4 mr-2" />
-          Export Results
+          {isAnalyzing ? (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4 mr-2" />
+              Run Analysis for {clientName}
+            </>
+          )}
         </Button>
+      </div>
+
+      {analysisResults.length > 0 && (
+        <div className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+          ✅ Last analysis completed successfully with {analysisResults.length} influencers processed
+        </div>
       )}
     </div>
   );

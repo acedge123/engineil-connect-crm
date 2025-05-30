@@ -10,9 +10,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
   
   const { 
     shopifyClients, 
-    customerOrders, 
-    influencers, 
-    ordersLoading 
+    influencers
   } = useAnalysisData(selectedShopifyClient);
 
   const { 
@@ -20,12 +18,6 @@ const InfluencerSpendingAnalysisFromCSV = () => {
     isAnalyzing, 
     handleAnalyze 
   } = useInfluencerAnalysis(selectedShopifyClient, shopifyClients);
-
-  const onAnalyze = () => {
-    if (customerOrders && influencers) {
-      handleAnalyze(customerOrders, influencers);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -35,9 +27,9 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         selectedShopifyClient={selectedShopifyClient}
         onShopifyClientChange={setSelectedShopifyClient}
         shopifyClients={shopifyClients}
-        onAnalyze={onAnalyze}
+        onAnalyze={handleAnalyze}
         isAnalyzing={isAnalyzing}
-        isOrdersLoading={ordersLoading}
+        isOrdersLoading={false}
         analysisResults={analysisResults}
         influencersCount={influencers?.length}
       />
