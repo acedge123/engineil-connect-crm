@@ -141,19 +141,24 @@ const CustomerOrdersUpload = () => {
 
     console.log('Processing', ordersToInsert.length, 'customer records');
 
-    // Delete existing orders for this client first
-    let deleteQuery = supabase
-      .from('customer_orders')
-      .delete()
-      .eq('user_id', user.id);
-
+    // Delete existing orders for this client first - simplified to avoid type inference issues
     if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-      deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
+      const { error: deleteError } = await supabase
+        .from('customer_orders')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('shopify_client_id', selectedShopifyClient);
+      
+      if (deleteError) throw deleteError;
     } else {
-      deleteQuery = deleteQuery.is('shopify_client_id', null);
+      const { error: deleteError } = await supabase
+        .from('customer_orders')
+        .delete()
+        .eq('user_id', user.id)
+        .is('shopify_client_id', null);
+      
+      if (deleteError) throw deleteError;
     }
-
-    await deleteQuery;
 
     const { data, error } = await supabase
       .from('customer_orders')

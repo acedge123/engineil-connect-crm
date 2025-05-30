@@ -18,6 +18,7 @@ export type Database = {
           order_date: string
           order_id: string
           order_total: number
+          shopify_client_id: string | null
           user_id: string
         }
         Insert: {
@@ -28,6 +29,7 @@ export type Database = {
           order_date: string
           order_id: string
           order_total?: number
+          shopify_client_id?: string | null
           user_id: string
         }
         Update: {
@@ -38,9 +40,18 @@ export type Database = {
           order_date?: string
           order_id?: string
           order_total?: number
+          shopify_client_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customer_orders_shopify_client_id_fkey"
+            columns: ["shopify_client_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       influencer_spending_analysis: {
         Row: {
