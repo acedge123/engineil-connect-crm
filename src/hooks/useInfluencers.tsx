@@ -25,12 +25,24 @@ export const useInfluencers = () => {
   const influencersQuery = useQuery<Influencer[]>({
     queryKey: ['influencers'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('Fetching influencers for user:', user.id);
+      
+      const { data, error, count } = await supabase
         .from('influencers')
-        .select('*')
+        .select('*', { count: 'exact' })
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching influencers:', error);
+        throw error;
+      }
+      
+      console.log(`Fetched ${data?.length || 0} influencers from database`);
+      console.log(`Total count from database: ${count}`);
+      
       return data as Influencer[];
     },
     enabled: !!user,
