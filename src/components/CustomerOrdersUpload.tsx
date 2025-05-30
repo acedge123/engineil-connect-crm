@@ -55,9 +55,9 @@ const CustomerOrdersUpload = () => {
 
   const shopifyClients = shopifyClientsQuery.data;
 
-  // CSV upload mutation with simplified typing to fix TypeScript error
+  // CSV upload mutation with fixed typing
   const uploadCsvMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (file: File): Promise<any[]> => {
       if (!user) throw new Error('User not authenticated');
 
       const text = await file.text();
@@ -67,43 +67,78 @@ const CustomerOrdersUpload = () => {
         throw new Error('CSV file must contain at least a header and one data row');
       }
 
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      const requiredHeaders = ['customer_email', 'order_id', 'order_total', 'order_date'];
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
       
-      if (!requiredHeaders.every(header => headers.includes(header))) {
-        throw new Error('CSV must contain columns: customer_email, order_id, order_total, order_date');
+      // Map Shopify headers to our expected format
+      const headerMap: Record<string, string> = {
+        'email': 'customer_email',
+        'first name': 'first_name',
+        'last name': 'last_name',
+        'total spent': 'total_spent',
+        'total orders': 'total_orders',
+        'customer id': 'customer_id'
+      };
+
+      console.log('CSV Headers found:', headers);
+
+      // Check if we have required Shopify headers
+      const requiredShopifyHeaders = ['email'];
+      const hasRequiredHeaders = requiredShopifyHeaders.some(header => 
+        headers.includes(header.toLowerCase())
+      );
+      
+      if (!hasRequiredHeaders) {
+        throw new Error('CSV must contain at least an "Email" column for Shopify customer data');
       }
 
       const ordersToInsert: CustomerOrderInsert[] = [];
       
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
+        const values = lines[i].split(',').map(v => v.trim().replace(/['"]/g, ''));
         const order: Partial<CustomerOrderInsert> = { user_id: user.id };
         
         headers.forEach((header, index) => {
           const value = values[index];
-          if (value) {
+          if (value && value.trim()) {
             switch (header) {
-              case 'customer_email':
+              case 'email':
                 order.customer_email = value;
                 break;
-              case 'customer_name':
+              case 'first name':
                 order.customer_name = value;
                 break;
-              case 'order_id':
-                order.order_id = value;
+              case 'last name':
+                if (order.customer_name) {
+                  order.customer_name += ` ${value}`;
+                } else {
+                  order.customer_name = value;
+                }
                 break;
-              case 'order_total':
-                order.order_total = parseFloat(value);
+              case 'customer id':
+                order.order_id = value; // Using customer ID as order ID for now
                 break;
-              case 'order_date':
-                order.order_date = value;
+              case 'total spent':
+                const totalSpent = parseFloat(value.replace(/[$,]/g, ''));
+                if (!isNaN(totalSpent)) {
+                  order.order_total = totalSpent;
+                }
                 break;
             }
           }
         });
 
-        if (order.customer_email && order.order_id && order.order_total && order.order_date) {
+        // For Shopify customer data, we'll create synthetic order data
+        if (order.customer_email) {
+          if (!order.order_id) {
+            order.order_id = `CUST-${Date.now()}-${i}`;
+          }
+          if (!order.order_total) {
+            order.order_total = 0;
+          }
+          if (!order.order_date) {
+            order.order_date = new Date().toISOString().split('T')[0];
+          }
+          
           if (selectedShopifyClient && selectedShopifyClient !== 'default') {
             order.shopify_client_id = selectedShopifyClient;
           }
@@ -112,8 +147,10 @@ const CustomerOrdersUpload = () => {
       }
 
       if (ordersToInsert.length === 0) {
-        throw new Error('No valid order data found in CSV');
+        throw new Error('No valid customer data found in CSV');
       }
+
+      console.log('Processing', ordersToInsert.length, 'customer records');
 
       // Delete existing orders for this client first
       let deleteQuery = supabase
@@ -135,7 +172,7 @@ const CustomerOrdersUpload = () => {
         .select();
 
       if (error) throw error;
-      return data;
+      return data || [];
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
@@ -144,7 +181,7 @@ const CustomerOrdersUpload = () => {
       const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
         ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
         : 'Default';
-      toast.success(`Successfully uploaded ${data.length} orders for ${clientName}`);
+      toast.success(`Successfully uploaded ${data.length} customer records for ${clientName}`);
     },
     onError: (error: Error) => {
       toast.error(`Failed to upload CSV: ${error.message}`);
@@ -164,10 +201,10 @@ const CustomerOrdersUpload = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="w-5 h-5" />
-          Customer Orders Data
+          Customer Data Upload
         </CardTitle>
         <CardDescription>
-          Upload customer order data from CSV files to analyze influencer spending patterns
+          Upload Shopify customer data from CSV files to analyze influencer spending patterns
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -181,14 +218,16 @@ const CustomerOrdersUpload = () => {
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full">
               <Upload className="w-4 h-4 mr-2" />
-              Upload Customer Orders CSV
+              Upload Shopify Customer CSV
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Upload Customer Orders CSV</DialogTitle>
+              <DialogTitle>Upload Shopify Customer CSV</DialogTitle>
               <DialogDescription>
-                Upload a CSV file with customer order data. Required columns: customer_email, order_id, order_total, order_date. Optional: customer_name.
+                Upload a CSV file with Shopify customer data. Required column: Email. 
+                Optional columns: First Name, Last Name, Customer ID, Total Spent, Total Orders.
+                The system will automatically map Shopify column headers.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
