@@ -64,7 +64,23 @@ export const useInfluencerAnalysis = (
         throw new Error('Missing required data for analysis');
       }
 
+      console.log(`=== ANALYSIS DEBUG START ===`);
       console.log(`Starting analysis with ${influencers.length} influencers and ${customerOrders.length} customer orders`);
+
+      // Detailed analysis of customer orders
+      console.log(`=== CUSTOMER ORDERS ANALYSIS ===`);
+      const totalCustomerSpending = customerOrders.reduce((sum, order) => sum + order.order_total, 0);
+      const uniqueCustomerEmails = new Set(customerOrders.map(order => order.customer_email.toLowerCase().trim()));
+      console.log(`Total customer orders: ${customerOrders.length}`);
+      console.log(`Unique customer emails: ${uniqueCustomerEmails.size}`);
+      console.log(`Total spending in customer orders: $${totalCustomerSpending.toFixed(2)}`);
+      
+      // Sample customer orders
+      console.log(`Sample customer orders:`, customerOrders.slice(0, 5).map(order => ({
+        email: order.customer_email,
+        total: order.order_total,
+        name: order.customer_name
+      })));
 
       // Create email map for faster lookups
       const ordersByEmail = new Map<string, CustomerOrder[]>();
@@ -77,15 +93,31 @@ export const useInfluencerAnalysis = (
         ordersByEmail.get(normalizedEmail)!.push(order);
       });
 
+      console.log(`=== EMAIL MAPPING ===`);
+      console.log(`Created order lookup map with ${ordersByEmail.size} unique customer emails`);
+
+      // Analyze influencer emails
+      console.log(`=== INFLUENCER ANALYSIS ===`);
+      const influencerEmails = new Set(influencers.map(inf => inf.email.toLowerCase().trim()));
+      console.log(`Total influencers: ${influencers.length}`);
+      console.log(`Unique influencer emails: ${influencerEmails.size}`);
+      
+      // Sample influencer emails
+      console.log(`Sample influencer emails:`, Array.from(influencerEmails).slice(0, 10));
+
+      // Find overlapping emails
+      const overlappingEmails = Array.from(influencerEmails).filter(email => uniqueCustomerEmails.has(email));
+      console.log(`=== EMAIL OVERLAP ANALYSIS ===`);
+      console.log(`Overlapping emails found: ${overlappingEmails.length}`);
+      console.log(`Sample overlapping emails:`, overlappingEmails.slice(0, 10));
+
       const clientName = selectedShopifyClient 
         ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
         : 'Default';
 
-      console.log(`Analyzing ${influencers.length} influencers against ${customerOrders.length} orders for client: ${clientName}`);
-      console.log(`Created order lookup map with ${ordersByEmail.size} unique customer emails`);
-
       const results: InfluencerSpendingResult[] = [];
       let matchedInfluencers = 0;
+      let totalMatchedSpending = 0;
 
       for (const influencer of influencers) {
         const normalizedInfluencerEmail = influencer.email.toLowerCase().trim();
@@ -94,8 +126,11 @@ export const useInfluencerAnalysis = (
         if (influencerOrders.length > 0) {
           matchedInfluencers++;
           const totalSpent = influencerOrders.reduce((sum, order) => sum + order.order_total, 0);
+          totalMatchedSpending += totalSpent;
           const orderCount = influencerOrders.length;
           const averageOrderValue = totalSpent / orderCount;
+
+          console.log(`MATCH: ${influencer.email} -> $${totalSpent.toFixed(2)} (${orderCount} orders)`);
 
           // Get date range - only from orders with valid dates
           const validOrderDates = influencerOrders
@@ -114,8 +149,6 @@ export const useInfluencerAnalysis = (
 
           // Get customer name from orders
           const customerName = influencerOrders.find(order => order.customer_name)?.customer_name;
-
-          console.log(`Matched influencer ${influencer.email}: $${totalSpent.toFixed(2)} across ${orderCount} orders`);
 
           results.push({
             influencer_id: influencer.id,
@@ -152,7 +185,12 @@ export const useInfluencerAnalysis = (
         }
       }
 
+      console.log(`=== FINAL ANALYSIS RESULTS ===`);
       console.log(`Analysis complete: ${matchedInfluencers} out of ${influencers.length} influencers had orders`);
+      console.log(`Total matched spending: $${totalMatchedSpending.toFixed(2)}`);
+      console.log(`Expected matches (from ChatGPT): 1772 influencers with $268,906`);
+      console.log(`Our results: ${matchedInfluencers} influencers with $${totalMatchedSpending.toFixed(2)}`);
+      console.log(`=== ANALYSIS DEBUG END ===`);
 
       // Save results to database
       const analysisData = results.map(result => ({
@@ -199,7 +237,8 @@ export const useInfluencerAnalysis = (
         ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
         : 'Default';
       const matchedCount = results.filter(r => r.total_spent > 0).length;
-      toast.success(`Analysis complete for ${clientName}! Analyzed ${results.length} influencers, found ${matchedCount} with orders`);
+      const totalSpending = results.reduce((sum, r) => sum + r.total_spent, 0);
+      toast.success(`Analysis complete for ${clientName}! Found ${matchedCount} influencers with orders totaling $${totalSpending.toFixed(2)}`);
     },
     onError: (error: Error) => {
       toast.error(`Analysis failed: ${error.message}`);
