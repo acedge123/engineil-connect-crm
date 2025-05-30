@@ -55,8 +55,8 @@ const CustomerOrdersUpload = () => {
 
   const shopifyClients = shopifyClientsQuery.data;
 
-  // CSV upload mutation with explicit typing to fix TypeScript error
-  const uploadCsvMutation = useMutation<CustomerOrderInsert[], Error, File>({
+  // CSV upload mutation with simplified typing to fix TypeScript error
+  const uploadCsvMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!user) throw new Error('User not authenticated');
 
@@ -135,7 +135,7 @@ const CustomerOrdersUpload = () => {
         .select();
 
       if (error) throw error;
-      return data as CustomerOrderInsert[];
+      return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
