@@ -37,8 +37,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { shopify_client_id } = await req.json();
 
-    console.log('=== BACKEND ANALYSIS START ===');
-    console.log(`Analyzing for shopify_client_id: ${shopify_client_id || 'null/default'}`);
+    console.log('=== SIMPLE ANALYSIS START ===');
+    console.log(`Target shopify_client_id: ${shopify_client_id}`);
 
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
@@ -54,74 +54,37 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error('Invalid user token');
     }
 
-    console.log(`Processing for user: ${user.id}`);
-
-    // Fetch ALL influencers for the user in batches
-    let allInfluencers: any[] = [];
-    let offset = 0;
-    const batchSize = 1000;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data: influencerBatch, error: influencersError } = await supabaseClient
-        .from('influencers')
-        .select('id, email, name, instagram_handle, category')
-        .eq('user_id', user.id)
-        .range(offset, offset + batchSize - 1);
-
-      if (influencersError) {
-        throw new Error(`Failed to fetch influencers: ${influencersError.message}`);
-      }
-
-      if (influencerBatch && influencerBatch.length > 0) {
-        allInfluencers = allInfluencers.concat(influencerBatch);
-        console.log(`Fetched batch: ${influencerBatch.length} influencers (total so far: ${allInfluencers.length})`);
-        
-        if (influencerBatch.length < batchSize) {
-          hasMore = false;
-        } else {
-          offset += batchSize;
-        }
-      } else {
-        hasMore = false;
-      }
-    }
-
-    console.log(`Successfully fetched ALL ${allInfluencers.length} influencers`);
-
-    // Fetch customer orders ONLY for the specified shopify_client_id
-    console.log(`Building customer orders query for shopify_client_id: ${shopify_client_id}`);
-    
-    let ordersQuery = supabaseClient
-      .from('customer_orders')
-      .select('customer_email, customer_name, order_total, order_date')
+    // Get ALL influencers for the user
+    const { data: allInfluencers, error: influencersError } = await supabaseClient
+      .from('influencers')
+      .select('id, email, name, instagram_handle, category')
       .eq('user_id', user.id);
 
-    // CRITICAL FIX: Only get orders for the specified shopify_client_id
-    if (shopify_client_id && shopify_client_id !== 'default' && shopify_client_id !== null) {
-      console.log(`FILTERING ORDERS: Only orders with shopify_client_id = ${shopify_client_id}`);
-      ordersQuery = ordersQuery.eq('shopify_client_id', shopify_client_id);
-    } else {
-      console.log('FILTERING ORDERS: Only orders with null shopify_client_id (default client)');
-      ordersQuery = ordersQuery.is('shopify_client_id', null);
+    if (influencersError) {
+      throw new Error(`Failed to fetch influencers: ${influencersError.message}`);
     }
 
-    const { data: customerOrders, error: ordersError } = await ordersQuery;
+    console.log(`Retrieved ${allInfluencers?.length || 0} influencers`);
+
+    // Get ALL customer orders for the specific shopify_client_id
+    const { data: customerOrders, error: ordersError } = await supabaseClient
+      .from('customer_orders')
+      .select('customer_email, customer_name, order_total, order_date')
+      .eq('user_id', user.id)
+      .eq('shopify_client_id', shopify_client_id);
 
     if (ordersError) {
       console.error('Customer orders query error:', ordersError);
       throw new Error(`Failed to fetch customer orders: ${ordersError.message}`);
     }
 
-    console.log(`FILTERED ORDERS: Found ${customerOrders?.length || 0} orders for shopify_client_id: ${shopify_client_id}`);
+    console.log(`Retrieved ${customerOrders?.length || 0} customer orders`);
 
-    // If no customer orders found for this client, return empty results
-    if (!customerOrders || customerOrders.length === 0) {
-      console.log('No customer orders found for this shopify_client_id');
+    if (!allInfluencers || !customerOrders) {
       return new Response(JSON.stringify({
         results: [],
         summary: {
-          total_influencers: allInfluencers?.length || 0,
+          total_influencers: 0,
           matched_influencers: 0,
           total_spending: 0,
           total_orders: 0
@@ -143,7 +106,7 @@ const handler = async (req: Request): Promise<Response> => {
       ordersByEmail.get(normalizedEmail)!.push(order);
     });
 
-    console.log(`Created order lookup map with ${ordersByEmail.size} unique customer emails from FILTERED orders`);
+    console.log(`Created lookup map with ${ordersByEmail.size} unique customer emails`);
 
     // Process influencers and match with orders
     const results: InfluencerSpendingResult[] = [];
@@ -161,7 +124,7 @@ const handler = async (req: Request): Promise<Response> => {
         const orderCount = influencerOrders.length;
         const averageOrderValue = totalSpent / orderCount;
 
-        // Get date range - only from orders with valid dates
+        // Get date range
         const validOrderDates = influencerOrders
           .filter(order => order.order_date && order.order_date.trim() !== '')
           .map(order => new Date(order.order_date));
@@ -176,7 +139,6 @@ const handler = async (req: Request): Promise<Response> => {
           lastOrderDate = lastDate.toISOString();
         }
 
-        // Get customer name from orders
         const customerName = influencerOrders.find(order => order.customer_name)?.customer_name;
 
         results.push({
@@ -216,12 +178,12 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    console.log(`=== BACKEND ANALYSIS RESULTS ===`);
-    console.log(`Total influencers processed: ${allInfluencers.length}`);
-    console.log(`Matched influencers with orders: ${matchedInfluencers}`);
-    console.log(`Total matched spending: $${totalMatchedSpending.toFixed(2)}`);
-    console.log(`FILTERED customer orders used: ${customerOrders.length}`);
-    console.log(`=== BACKEND ANALYSIS END ===`);
+    console.log(`=== ANALYSIS RESULTS ===`);
+    console.log(`Total influencers: ${allInfluencers.length}`);
+    console.log(`Total customer orders: ${customerOrders.length}`);
+    console.log(`Matched influencers: ${matchedInfluencers}`);
+    console.log(`Total spending: $${totalMatchedSpending.toFixed(2)}`);
+    console.log(`=== ANALYSIS END ===`);
 
     // Save results to database for caching
     const analysisData = results.map(result => ({
@@ -259,7 +221,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (insertError) {
       console.error('Failed to save analysis results:', insertError);
-      // Don't throw error, just log it as results are still returned
     }
 
     return new Response(JSON.stringify({
