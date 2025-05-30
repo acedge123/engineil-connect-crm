@@ -27,23 +27,46 @@ export const useInfluencers = () => {
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
 
-      console.log('Fetching influencers for user:', user.id);
+      console.log('Fetching ALL influencers for user:', user.id);
       
-      const { data, error, count } = await supabase
-        .from('influencers')
-        .select('*', { count: 'exact' })
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Fetch ALL influencers without any limits
+      let allInfluencers: Influencer[] = [];
+      let from = 0;
+      const batchSize = 1000; // Fetch in batches to avoid memory issues
+      let hasMore = true;
 
-      if (error) {
-        console.error('Error fetching influencers:', error);
-        throw error;
+      while (hasMore) {
+        const { data, error, count } = await supabase
+          .from('influencers')
+          .select('*', { count: 'exact' })
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, from + batchSize - 1);
+
+        if (error) {
+          console.error('Error fetching influencers:', error);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          allInfluencers = [...allInfluencers, ...data];
+          from += batchSize;
+          
+          // Check if we've fetched all records
+          hasMore = data.length === batchSize;
+          
+          console.log(`Fetched batch: ${data.length} influencers (total so far: ${allInfluencers.length})`);
+          if (count !== null) {
+            console.log(`Database total count: ${count}`);
+          }
+        } else {
+          hasMore = false;
+        }
       }
       
-      console.log(`Fetched ${data?.length || 0} influencers from database`);
-      console.log(`Total count from database: ${count}`);
+      console.log(`Successfully fetched ALL ${allInfluencers.length} influencers from database`);
       
-      return data as Influencer[];
+      return allInfluencers as Influencer[];
     },
     enabled: !!user,
   });
