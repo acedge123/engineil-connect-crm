@@ -50,7 +50,7 @@ export const useInfluencerAnalysis = (
         throw new Error('User not authenticated');
       }
 
-      console.log('=== FRONTEND: Calling backend analysis function ===');
+      console.log('=== FRONTEND: Calling optimized analysis function ===');
       console.log(`Selected Shopify Client: ${selectedShopifyClient}`);
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -58,7 +58,7 @@ export const useInfluencerAnalysis = (
         throw new Error('No active session');
       }
 
-      const { data, error } = await supabase.functions.invoke('influencer-spending-analysis', {
+      const { data, error } = await supabase.functions.invoke('influencer-analysis-optimized', {
         body: {
           shopify_client_id: selectedShopifyClient === 'default' ? null : selectedShopifyClient,
         },
@@ -68,14 +68,15 @@ export const useInfluencerAnalysis = (
       });
 
       if (error) {
-        console.error('Backend function error:', error);
+        console.error('Optimized analysis function error:', error);
         throw new Error(error.message || 'Analysis failed');
       }
 
-      console.log('=== FRONTEND: Backend analysis completed ===');
+      console.log('=== FRONTEND: Optimized analysis completed ===');
       console.log(`Total influencers: ${data.summary.total_influencers}`);
       console.log(`Matched influencers: ${data.summary.matched_influencers}`);
       console.log(`Total spending: $${data.summary.total_spending.toFixed(2)}`);
+      console.log(`Total orders: ${data.summary.total_orders}`);
 
       return data;
     },
@@ -86,17 +87,17 @@ export const useInfluencerAnalysis = (
         : 'Default';
       
       toast.success(
-        `Analysis complete for ${clientName}! Found ${data.summary.matched_influencers} influencers with orders totaling $${data.summary.total_spending.toFixed(2)}`
+        `Optimized analysis complete for ${clientName}! Found ${data.summary.matched_influencers} influencers with orders totaling $${data.summary.total_spending.toFixed(2)} across ${data.summary.total_orders} orders`
       );
     },
     onError: (error: Error) => {
-      console.error('Analysis mutation error:', error);
+      console.error('Optimized analysis mutation error:', error);
       toast.error(`Analysis failed: ${error.message}`);
     },
   });
 
   const handleAnalyze = () => {
-    console.log('=== FRONTEND: Starting analysis ===');
+    console.log('=== FRONTEND: Starting optimized analysis ===');
     analyzeSpendingMutation.mutate();
   };
 
