@@ -56,50 +56,48 @@ export type Database = {
       influencer_spending_analysis: {
         Row: {
           analysis_date: string
-          average_order_value: number | null
           created_at: string
           customer_email: string
           customer_name: string | null
-          first_order_date: string | null
+          customer_order_id: string | null
           id: string
           influencer_id: string | null
-          last_order_date: string | null
-          order_count: number | null
           shopify_client_id: string | null
           total_spent: number | null
           user_id: string
         }
         Insert: {
           analysis_date?: string
-          average_order_value?: number | null
           created_at?: string
           customer_email: string
           customer_name?: string | null
-          first_order_date?: string | null
+          customer_order_id?: string | null
           id?: string
           influencer_id?: string | null
-          last_order_date?: string | null
-          order_count?: number | null
           shopify_client_id?: string | null
           total_spent?: number | null
           user_id: string
         }
         Update: {
           analysis_date?: string
-          average_order_value?: number | null
           created_at?: string
           customer_email?: string
           customer_name?: string | null
-          first_order_date?: string | null
+          customer_order_id?: string | null
           id?: string
           influencer_id?: string | null
-          last_order_date?: string | null
-          order_count?: number | null
           shopify_client_id?: string | null
           total_spent?: number | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "influencer_spending_analysis_customer_order_id_fkey"
+            columns: ["customer_order_id"]
+            isOneToOne: false
+            referencedRelation: "customer_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "influencer_spending_analysis_influencer_id_fkey"
             columns: ["influencer_id"]

@@ -5,8 +5,12 @@ import { FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ClientSelector from './ClientSelector';
 import CustomerOrderUploadDialog from './CustomerOrderUploadDialog';
+import InfluencerCustomerLinkDialog from './InfluencerCustomerLinkDialog';
+import InfluencerSpendingTable from './InfluencerSpendingTable';
+import { useInfluencerSpendingAnalysis } from '@/hooks/useInfluencerSpendingAnalysis';
 
 type ShopifyClient = {
   id: string;
@@ -18,6 +22,8 @@ const CustomerOrdersUpload = () => {
   const { user } = useAuth();
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+
+  const { analysis, deleteLink, isDeleting } = useInfluencerSpendingAnalysis(selectedShopifyClient);
 
   // Fetch Shopify clients
   const shopifyClientsQuery = useQuery({
@@ -40,30 +46,44 @@ const CustomerOrdersUpload = () => {
   const shopifyClients = shopifyClientsQuery.data;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          Customer Data Upload
-        </CardTitle>
-        <CardDescription>
-          Upload Shopify customer data from CSV files to analyze influencer spending patterns
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <ClientSelector
-          selectedShopifyClient={selectedShopifyClient}
-          onValueChange={setSelectedShopifyClient}
-          shopifyClients={shopifyClients}
-        />
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Customer Data Management
+          </CardTitle>
+          <CardDescription>
+            Upload Shopify customer data and create influencer-customer connections
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ClientSelector
+            selectedShopifyClient={selectedShopifyClient}
+            onValueChange={setSelectedShopifyClient}
+            shopifyClients={shopifyClients}
+          />
 
-        <CustomerOrderUploadDialog
-          selectedShopifyClient={selectedShopifyClient}
-          isOpen={isUploadDialogOpen}
-          onOpenChange={setIsUploadDialogOpen}
-        />
-      </CardContent>
-    </Card>
+          <div className="flex gap-2">
+            <CustomerOrderUploadDialog
+              selectedShopifyClient={selectedShopifyClient}
+              isOpen={isUploadDialogOpen}
+              onOpenChange={setIsUploadDialogOpen}
+            />
+            
+            <InfluencerCustomerLinkDialog 
+              selectedShopifyClient={selectedShopifyClient}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <InfluencerSpendingTable
+        analysis={analysis || []}
+        onDeleteLink={deleteLink}
+        isDeleting={isDeleting}
+      />
+    </div>
   );
 };
 
