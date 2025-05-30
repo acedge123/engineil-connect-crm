@@ -89,7 +89,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Successfully fetched ALL ${allInfluencers.length} influencers`);
 
-    // Fetch customer orders based on shopify_client_id - with better debugging
+    // Fetch customer orders ONLY for the specified shopify_client_id
     console.log(`Building customer orders query for shopify_client_id: ${shopify_client_id}`);
     
     let ordersQuery = supabaseClient
@@ -97,12 +97,12 @@ const handler = async (req: Request): Promise<Response> => {
       .select('customer_email, customer_name, order_total, order_date')
       .eq('user_id', user.id);
 
-    // Handle shopify_client_id filtering more explicitly
+    // CRITICAL FIX: Only get orders for the specified shopify_client_id
     if (shopify_client_id && shopify_client_id !== 'default' && shopify_client_id !== null) {
-      console.log(`Filtering by shopify_client_id: ${shopify_client_id}`);
+      console.log(`FILTERING ORDERS: Only orders with shopify_client_id = ${shopify_client_id}`);
       ordersQuery = ordersQuery.eq('shopify_client_id', shopify_client_id);
     } else {
-      console.log('Filtering for null shopify_client_id (default client)');
+      console.log('FILTERING ORDERS: Only orders with null shopify_client_id (default client)');
       ordersQuery = ordersQuery.is('shopify_client_id', null);
     }
 
@@ -113,38 +113,18 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error(`Failed to fetch customer orders: ${ordersError.message}`);
     }
 
-    console.log(`Fetched ${customerOrders?.length || 0} customer orders`);
+    console.log(`FILTERED ORDERS: Found ${customerOrders?.length || 0} orders for shopify_client_id: ${shopify_client_id}`);
 
-    // If no customer orders, let's also check what clients exist for debugging
+    // If no customer orders found for this client, return empty results
     if (!customerOrders || customerOrders.length === 0) {
-      console.log('=== DEBUGGING: No customer orders found ===');
-      
-      // Check all shopify_client_ids for this user
-      const { data: allOrdersCheck } = await supabaseClient
-        .from('customer_orders')
-        .select('shopify_client_id')
-        .eq('user_id', user.id)
-        .limit(5);
-        
-      console.log('Sample shopify_client_ids in customer_orders:', allOrdersCheck?.map(o => o.shopify_client_id));
-      
-      // Check total count for user
-      const { count: totalOrdersCount } = await supabaseClient
-        .from('customer_orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-        
-      console.log(`Total customer orders for user: ${totalOrdersCount}`);
-    }
-
-    if (!allInfluencers || !customerOrders) {
+      console.log('No customer orders found for this shopify_client_id');
       return new Response(JSON.stringify({
         results: [],
         summary: {
           total_influencers: allInfluencers?.length || 0,
           matched_influencers: 0,
           total_spending: 0,
-          total_orders: customerOrders?.length || 0
+          total_orders: 0
         }
       }), {
         status: 200,
@@ -163,7 +143,7 @@ const handler = async (req: Request): Promise<Response> => {
       ordersByEmail.get(normalizedEmail)!.push(order);
     });
 
-    console.log(`Created order lookup map with ${ordersByEmail.size} unique customer emails`);
+    console.log(`Created order lookup map with ${ordersByEmail.size} unique customer emails from FILTERED orders`);
 
     // Process influencers and match with orders
     const results: InfluencerSpendingResult[] = [];
@@ -240,8 +220,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Total influencers processed: ${allInfluencers.length}`);
     console.log(`Matched influencers with orders: ${matchedInfluencers}`);
     console.log(`Total matched spending: $${totalMatchedSpending.toFixed(2)}`);
-    console.log(`Total customer orders available: ${customerOrders.length}`);
-    console.log(`Expected matches: 1772 influencers`);
+    console.log(`FILTERED customer orders used: ${customerOrders.length}`);
     console.log(`=== BACKEND ANALYSIS END ===`);
 
     // Save results to database for caching
