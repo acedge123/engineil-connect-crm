@@ -34,9 +34,3 @@ export * from "./toast";
 export * from "./toggle";
 export * from "./toggle-group";
 export * from "./tooltip";
-
-// Export new analysis components
-export { default as AnalysisStatsCards } from "../AnalysisStatsCards";
-export { default as AnalysisResultsTable } from "../AnalysisResultsTable";
-export { default as ClientSelector } from "../ClientSelector";
-export { default as AnalysisControls } from "../AnalysisControls";
