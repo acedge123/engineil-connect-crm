@@ -29,6 +29,20 @@ const AnalysisStatsCards: React.FC<AnalysisStatsCardsProps> = ({ analysisResults
   const averageSpending = influencersWithOrders.length > 0 
     ? totalSpending / influencersWithOrders.length 
     : 0;
+  const totalOrders = analysisResults.reduce((sum, result) => sum + result.order_count, 0);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat('en-US').format(num);
+  };
 
   return (
     <div className="grid gap-4 md:grid-cols-4">
@@ -38,7 +52,7 @@ const AnalysisStatsCards: React.FC<AnalysisStatsCardsProps> = ({ analysisResults
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">${totalSpending.toFixed(2)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(totalSpending)}</div>
         </CardContent>
       </Card>
 
@@ -48,9 +62,9 @@ const AnalysisStatsCards: React.FC<AnalysisStatsCardsProps> = ({ analysisResults
           <Users className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{influencersWithOrders.length}</div>
+          <div className="text-2xl font-bold">{formatNumber(influencersWithOrders.length)}</div>
           <p className="text-xs text-muted-foreground">
-            of {analysisResults.length} total
+            of {formatNumber(analysisResults.length)} total
           </p>
         </CardContent>
       </Card>
@@ -61,7 +75,7 @@ const AnalysisStatsCards: React.FC<AnalysisStatsCardsProps> = ({ analysisResults
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">${averageSpending.toFixed(2)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(averageSpending)}</div>
         </CardContent>
       </Card>
 
@@ -72,7 +86,7 @@ const AnalysisStatsCards: React.FC<AnalysisStatsCardsProps> = ({ analysisResults
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">
-            {analysisResults.reduce((sum, result) => sum + result.order_count, 0)}
+            {formatNumber(totalOrders)}
           </div>
         </CardContent>
       </Card>
