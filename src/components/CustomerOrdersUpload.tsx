@@ -35,10 +35,10 @@ const CustomerOrdersUpload = () => {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
 
-  // Fetch Shopify clients with explicit typing
-  const shopifyClientsQuery = useQuery<ShopifyClient[]>({
+  // Fetch Shopify clients
+  const shopifyClientsQuery = useQuery({
     queryKey: ['shopify-clients'],
-    queryFn: async () => {
+    queryFn: async (): Promise<ShopifyClient[]> => {
       if (!user) throw new Error('User not authenticated');
       
       const { data, error } = await supabase
@@ -55,9 +55,9 @@ const CustomerOrdersUpload = () => {
 
   const shopifyClients = shopifyClientsQuery.data;
 
-  // CSV upload mutation with fixed typing
+  // Simplified CSV upload mutation
   const uploadCsvMutation = useMutation({
-    mutationFn: async (file: File): Promise<any[]> => {
+    mutationFn: async (file: File) => {
       if (!user) throw new Error('User not authenticated');
 
       const text = await file.text();
@@ -69,16 +69,6 @@ const CustomerOrdersUpload = () => {
 
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
       
-      // Map Shopify headers to our expected format
-      const headerMap: Record<string, string> = {
-        'email': 'customer_email',
-        'first name': 'first_name',
-        'last name': 'last_name',
-        'total spent': 'total_spent',
-        'total orders': 'total_orders',
-        'customer id': 'customer_id'
-      };
-
       console.log('CSV Headers found:', headers);
 
       // Check if we have required Shopify headers
@@ -115,7 +105,7 @@ const CustomerOrdersUpload = () => {
                 }
                 break;
               case 'customer id':
-                order.order_id = value; // Using customer ID as order ID for now
+                order.order_id = value;
                 break;
               case 'total spent':
                 const totalSpent = parseFloat(value.replace(/[$,]/g, ''));
