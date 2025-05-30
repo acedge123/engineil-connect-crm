@@ -112,7 +112,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
   const customerOrders = customerOrdersQuery.data;
   const ordersLoading = customerOrdersQuery.isLoading;
 
-  // Fetch ALL influencers without any limits
+  // Fetch ALL influencers without any limits (same logic as useInfluencers hook)
   const influencersQuery = useQuery<Influencer[]>({
     queryKey: ['influencers-for-analysis'],
     queryFn: async () => {
@@ -120,21 +120,44 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       
       console.log('Fetching ALL influencers for analysis...');
       
-      const { data, error, count } = await supabase
-        .from('influencers')
-        .select('*', { count: 'exact' })
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Fetch ALL influencers without any limits using the same batching logic
+      let allInfluencers: Influencer[] = [];
+      let from = 0;
+      const batchSize = 1000; // Fetch in batches to avoid memory issues
+      let hasMore = true;
 
-      if (error) {
-        console.error('Error fetching influencers for analysis:', error);
-        throw error;
+      while (hasMore) {
+        const { data, error, count } = await supabase
+          .from('influencers')
+          .select('*', { count: 'exact' })
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, from + batchSize - 1);
+
+        if (error) {
+          console.error('Error fetching influencers for analysis:', error);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          allInfluencers = [...allInfluencers, ...data];
+          from += batchSize;
+          
+          // Check if we've fetched all records
+          hasMore = data.length === batchSize;
+          
+          console.log(`Fetched batch: ${data.length} influencers for analysis (total so far: ${allInfluencers.length})`);
+          if (count !== null) {
+            console.log(`Database total count for analysis: ${count}`);
+          }
+        } else {
+          hasMore = false;
+        }
       }
       
-      console.log(`Fetched ${data?.length || 0} influencers for analysis`);
-      console.log(`Total influencer count: ${count}`);
+      console.log(`Successfully fetched ALL ${allInfluencers.length} influencers for analysis`);
       
-      return data || [];
+      return allInfluencers;
     },
     enabled: !!user,
   });
