@@ -37,7 +37,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { shopify_client_id } = await req.json();
 
-    console.log('=== FIXED ANALYSIS START ===');
+    console.log('=== ANALYSIS START ===');
     console.log(`Target shopify_client_id: ${shopify_client_id}`);
 
     // Get user from auth header
@@ -95,56 +95,16 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Debug: Log a sample of customer orders to understand the data structure
-    if (customerOrders.length > 0) {
-      console.log('Sample customer order data:', JSON.stringify(customerOrders[0], null, 2));
-    }
-
     // Create email map for faster lookups
     const ordersByEmail = new Map<string, typeof customerOrders>();
     
-    customerOrders.forEach((order, index) => {
+    customerOrders.forEach(order => {
       const normalizedEmail = order.customer_email.toLowerCase().trim();
-      
-      // Debug problematic order data
-      if (normalizedEmail.includes('alison.grayson')) {
-        console.log(`DEBUGGING Alison Grayson order [${index}]:`, {
-          customer_email: order.customer_email,
-          customer_name: order.customer_name,
-          order_total: order.order_total,
-          order_total_type: typeof order.order_total,
-          order_id: order.order_id,
-          order_date: order.order_date
-        });
-      }
-      
-      // Validate order_total is a valid number and not a phone number
-      let validOrderTotal = 0;
-      if (order.order_total !== null && order.order_total !== undefined) {
-        const orderTotalNum = Number(order.order_total);
-        // Check if the order total looks like a phone number (10+ digits)
-        const orderTotalStr = String(order.order_total);
-        if (orderTotalStr.length >= 10 && orderTotalStr.match(/^\d{10,}$/)) {
-          console.log(`WARNING: Suspected phone number in order_total for ${order.customer_email}: ${order.order_total}`);
-          validOrderTotal = 0; // Set to 0 if it looks like a phone number
-        } else if (!isNaN(orderTotalNum) && isFinite(orderTotalNum) && orderTotalNum >= 0 && orderTotalNum < 100000) {
-          // Only accept reasonable order totals (less than $100,000)
-          validOrderTotal = orderTotalNum;
-        } else {
-          console.log(`Invalid order_total for ${order.customer_email}: ${order.order_total} (type: ${typeof order.order_total})`);
-          validOrderTotal = 0;
-        }
-      }
-      
-      const validatedOrder = {
-        ...order,
-        order_total: validOrderTotal
-      };
       
       if (!ordersByEmail.has(normalizedEmail)) {
         ordersByEmail.set(normalizedEmail, []);
       }
-      ordersByEmail.get(normalizedEmail)!.push(validatedOrder);
+      ordersByEmail.get(normalizedEmail)!.push(order);
     });
 
     console.log(`Created lookup map with ${ordersByEmail.size} unique customer emails`);
@@ -219,7 +179,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    console.log(`=== FIXED ANALYSIS RESULTS ===`);
+    console.log(`=== ANALYSIS RESULTS ===`);
     console.log(`Total influencers: ${allInfluencers.length}`);
     console.log(`Total customer orders: ${customerOrders.length}`);
     console.log(`Matched influencers: ${matchedInfluencers}`);
