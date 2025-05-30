@@ -38,7 +38,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { shopify_client_id } = await req.json();
 
     console.log('=== BACKEND ANALYSIS START ===');
-    console.log(`Analyzing for shopify_client_id: ${shopify_client_id || 'default'}`);
+    console.log(`Analyzing for shopify_client_id: ${shopify_client_id || 'null/default'}`);
 
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
@@ -89,25 +89,53 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Successfully fetched ALL ${allInfluencers.length} influencers`);
 
-    // Fetch customer orders based on shopify_client_id
+    // Fetch customer orders based on shopify_client_id - with better debugging
+    console.log(`Building customer orders query for shopify_client_id: ${shopify_client_id}`);
+    
     let ordersQuery = supabaseClient
       .from('customer_orders')
       .select('customer_email, customer_name, order_total, order_date')
       .eq('user_id', user.id);
 
-    if (shopify_client_id && shopify_client_id !== 'default') {
+    // Handle shopify_client_id filtering more explicitly
+    if (shopify_client_id && shopify_client_id !== 'default' && shopify_client_id !== null) {
+      console.log(`Filtering by shopify_client_id: ${shopify_client_id}`);
       ordersQuery = ordersQuery.eq('shopify_client_id', shopify_client_id);
     } else {
+      console.log('Filtering for null shopify_client_id (default client)');
       ordersQuery = ordersQuery.is('shopify_client_id', null);
     }
 
     const { data: customerOrders, error: ordersError } = await ordersQuery;
 
     if (ordersError) {
+      console.error('Customer orders query error:', ordersError);
       throw new Error(`Failed to fetch customer orders: ${ordersError.message}`);
     }
 
     console.log(`Fetched ${customerOrders?.length || 0} customer orders`);
+
+    // If no customer orders, let's also check what clients exist for debugging
+    if (!customerOrders || customerOrders.length === 0) {
+      console.log('=== DEBUGGING: No customer orders found ===');
+      
+      // Check all shopify_client_ids for this user
+      const { data: allOrdersCheck } = await supabaseClient
+        .from('customer_orders')
+        .select('shopify_client_id')
+        .eq('user_id', user.id)
+        .limit(5);
+        
+      console.log('Sample shopify_client_ids in customer_orders:', allOrdersCheck?.map(o => o.shopify_client_id));
+      
+      // Check total count for user
+      const { count: totalOrdersCount } = await supabaseClient
+        .from('customer_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+        
+      console.log(`Total customer orders for user: ${totalOrdersCount}`);
+    }
 
     if (!allInfluencers || !customerOrders) {
       return new Response(JSON.stringify({
