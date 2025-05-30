@@ -21,7 +21,6 @@ interface CreatorGiftWebhookData {
   order_shopify_id?: string;
   webhook_created_at?: string;
   webhook_updated_at?: string;
-  user_id?: string; // Optional - will use fallback if not provided
 }
 
 serve(async (req: Request) => {
@@ -58,30 +57,9 @@ serve(async (req: Request) => {
       );
     }
 
-    // Use provided user_id or fallback to the main user (you can update this to your actual user ID)
-    let userId = webhookData.user_id;
-    
-    if (!userId) {
-      // Fallback: get the first user from the profiles table
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .limit(1);
-      
-      if (profileError || !profiles || profiles.length === 0) {
-        console.error('No user found for fallback:', profileError);
-        return new Response(
-          JSON.stringify({ error: 'No user account found to associate this gift with' }),
-          { 
-            status: 400, 
-            headers: { 'Content-Type': 'application/json', ...corsHeaders } 
-          }
-        );
-      }
-      
-      userId = profiles[0].id;
-      console.log('Using fallback user ID:', userId);
-    }
+    // Generate a unique UUID for this webhook entry
+    const webhookUuid = crypto.randomUUID();
+    console.log('Generated UUID for webhook:', webhookUuid);
 
     // Insert the creator gift data
     const { data, error } = await supabase
@@ -100,7 +78,7 @@ serve(async (req: Request) => {
         order_shopify_id: webhookData.order_shopify_id,
         webhook_created_at: webhookData.webhook_created_at,
         webhook_updated_at: webhookData.webhook_updated_at,
-        user_id: userId
+        user_id: webhookUuid
       });
 
     if (error) {
@@ -114,10 +92,15 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log('Creator gift stored successfully:', data);
+    console.log('Creator gift stored successfully with UUID:', webhookUuid);
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Creator gift data received and stored', data }),
+      JSON.stringify({ 
+        success: true, 
+        message: 'Creator gift data received and stored', 
+        webhook_id: webhookUuid,
+        data 
+      }),
       { 
         status: 200, 
         headers: { 'Content-Type': 'application/json', ...corsHeaders } 
