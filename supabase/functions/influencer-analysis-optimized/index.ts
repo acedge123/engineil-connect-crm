@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 
@@ -55,80 +56,159 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Analyzing for user: ${user.id}`);
 
-    // Step 1: Fetch all influencers (removed user_id filter)
-    console.log('Fetching influencers...');
-    const { data: influencers, error: influencersError } = await supabaseClient
-      .from('influencers')
-      .select('id, email, name, instagram_handle, category');
+    // Step 1: Fetch ALL influencers with pagination
+    console.log('Fetching all influencers with pagination...');
+    let allInfluencers: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
 
-    if (influencersError) {
-      throw new Error(`Failed to fetch influencers: ${influencersError.message}`);
+    while (hasMore) {
+      const { data: influencerBatch, error: influencersError } = await supabaseClient
+        .from('influencers')
+        .select('id, email, name, instagram_handle, category')
+        .range(from, from + batchSize - 1);
+
+      if (influencersError) {
+        throw new Error(`Failed to fetch influencers: ${influencersError.message}`);
+      }
+
+      if (influencerBatch && influencerBatch.length > 0) {
+        allInfluencers = [...allInfluencers, ...influencerBatch];
+        console.log(`Fetched batch ${from}-${from + influencerBatch.length - 1}: ${influencerBatch.length} influencers`);
+        
+        hasMore = influencerBatch.length === batchSize;
+        from += batchSize;
+      } else {
+        hasMore = false;
+      }
     }
 
-    console.log(`Found ${influencers?.length || 0} influencers`);
+    console.log(`Fetched ALL ${allInfluencers.length} influencers`);
 
-    // Step 2: Fetch customer orders based on shopify_client_id filter (removed user_id filter)
-    console.log('Fetching customer orders...');
-    let ordersQuery = supabaseClient
-      .from('customer_orders')
-      .select('customer_email, customer_name, order_total, order_date');
+    // Step 2: Fetch ALL customer orders with pagination
+    console.log('Fetching all customer orders with pagination...');
+    let allOrders: any[] = [];
+    from = 0;
+    hasMore = true;
 
-    // Apply shopify_client_id filter
-    if (shopify_client_id && shopify_client_id !== 'default') {
-      ordersQuery = ordersQuery.eq('shopify_client_id', shopify_client_id);
-    } else {
-      ordersQuery = ordersQuery.is('shopify_client_id', null);
+    while (hasMore) {
+      let ordersQuery = supabaseClient
+        .from('customer_orders')
+        .select('customer_email, customer_name, order_total, order_date')
+        .range(from, from + batchSize - 1);
+
+      // Apply shopify_client_id filter
+      if (shopify_client_id && shopify_client_id !== 'default') {
+        ordersQuery = ordersQuery.eq('shopify_client_id', shopify_client_id);
+      } else {
+        ordersQuery = ordersQuery.is('shopify_client_id', null);
+      }
+
+      const { data: orderBatch, error: ordersError } = await ordersQuery;
+
+      if (ordersError) {
+        throw new Error(`Failed to fetch orders: ${ordersError.message}`);
+      }
+
+      if (orderBatch && orderBatch.length > 0) {
+        allOrders = [...allOrders, ...orderBatch];
+        console.log(`Fetched batch ${from}-${from + orderBatch.length - 1}: ${orderBatch.length} orders`);
+        
+        hasMore = orderBatch.length === batchSize;
+        from += batchSize;
+      } else {
+        hasMore = false;
+      }
     }
 
-    const { data: orders, error: ordersError } = await ordersQuery;
+    console.log(`Fetched ALL ${allOrders.length} customer orders`);
 
-    if (ordersError) {
-      throw new Error(`Failed to fetch orders: ${ordersError.message}`);
-    }
-
-    console.log(`Found ${orders?.length || 0} customer orders`);
-
-    // Step 3: Process data in JavaScript to match influencers with orders
+    // Step 3: Process data with FIXED matching logic
     const results: InfluencerSpendingResult[] = [];
 
-    if (influencers && orders) {
-      // Create a map of customer emails to their orders for faster lookup
-      const ordersByEmail = new Map<string, typeof orders>();
-      orders.forEach(order => {
-        const email = order.customer_email?.toLowerCase()?.trim();
-        if (email) {
-          if (!ordersByEmail.has(email)) {
-            ordersByEmail.set(email, []);
-          }
-          ordersByEmail.get(email)!.push(order);
+    if (allInfluencers && allOrders) {
+      // Create a map of normalized customer emails to their orders for faster lookup
+      const ordersByEmail = new Map<string, typeof allOrders>();
+      
+      allOrders.forEach(order => {
+        if (!order.customer_email) return;
+        
+        // Normalize email: lowercase and trim
+        const normalizedEmail = order.customer_email.toLowerCase().trim();
+        
+        if (!ordersByEmail.has(normalizedEmail)) {
+          ordersByEmail.set(normalizedEmail, []);
         }
+        ordersByEmail.get(normalizedEmail)!.push(order);
       });
 
+      console.log(`Created email lookup map with ${ordersByEmail.size} unique email addresses`);
+
       // Process each influencer
-      influencers.forEach(influencer => {
-        const influencerEmail = influencer.email?.toLowerCase()?.trim();
-        const matchingOrders = influencerEmail ? ordersByEmail.get(influencerEmail) || [] : [];
+      let matchedCount = 0;
+      allInfluencers.forEach((influencer, index) => {
+        if (!influencer.email) {
+          // Create entry for influencer with no email
+          results.push({
+            influencer_id: influencer.id,
+            customer_email: influencer.email || '',
+            customer_name: undefined,
+            total_spent: 0,
+            order_count: 0,
+            first_order_date: '',
+            last_order_date: '',
+            average_order_value: 0,
+            influencer: {
+              name: influencer.name,
+              instagram_handle: influencer.instagram_handle,
+              category: influencer.category,
+            },
+          });
+          return;
+        }
+
+        // Normalize influencer email
+        const normalizedInfluencerEmail = influencer.email.toLowerCase().trim();
+        const matchingOrders = ordersByEmail.get(normalizedInfluencerEmail) || [];
+
+        if (matchingOrders.length > 0) {
+          matchedCount++;
+          console.log(`Match ${matchedCount}: ${influencer.email} has ${matchingOrders.length} orders`);
+        }
 
         // Calculate spending metrics
-        const totalSpent = matchingOrders.reduce((sum, order) => sum + (order.order_total || 0), 0);
+        const totalSpent = matchingOrders.reduce((sum, order) => {
+          const orderTotal = parseFloat(order.order_total) || 0;
+          return sum + orderTotal;
+        }, 0);
+        
         const orderCount = matchingOrders.length;
         const averageOrderValue = orderCount > 0 ? totalSpent / orderCount : 0;
 
-        // Get date range
+        // Get date range with better error handling
         const validOrderDates = matchingOrders
-          .filter(order => order.order_date && order.order_date.trim() !== '')
-          .map(order => new Date(order.order_date));
+          .map(order => {
+            if (!order.order_date || order.order_date.trim() === '') return null;
+            try {
+              return new Date(order.order_date);
+            } catch (e) {
+              console.warn(`Invalid date format for order: ${order.order_date}`);
+              return null;
+            }
+          })
+          .filter(date => date !== null && !isNaN(date.getTime()));
         
         let firstOrderDate = '';
         let lastOrderDate = '';
         
         if (validOrderDates.length > 0) {
-          const firstDate = new Date(Math.min(...validOrderDates.map(d => d.getTime())));
-          const lastDate = new Date(Math.max(...validOrderDates.map(d => d.getTime())));
-          firstOrderDate = firstDate.toISOString();
-          lastOrderDate = lastDate.toISOString();
+          const sortedDates = validOrderDates.sort((a, b) => a.getTime() - b.getTime());
+          firstOrderDate = sortedDates[0].toISOString();
+          lastOrderDate = sortedDates[sortedDates.length - 1].toISOString();
         }
 
+        // Get customer name from any of the matching orders
         const customerName = matchingOrders.find(order => order.customer_name)?.customer_name;
 
         results.push({
@@ -146,10 +226,15 @@ const handler = async (req: Request): Promise<Response> => {
             category: influencer.category,
           },
         });
-      });
-    }
 
-    console.log(`Analysis completed. Processed ${results.length} influencers.`);
+        // Log progress every 500 influencers
+        if ((index + 1) % 500 === 0) {
+          console.log(`Processed ${index + 1}/${allInfluencers.length} influencers. Matches so far: ${matchedCount}`);
+        }
+      });
+
+      console.log(`Analysis completed. Total matches found: ${matchedCount}`);
+    }
 
     // Calculate summary statistics
     const matchedInfluencers = results.filter(r => r.order_count > 0).length;
@@ -191,17 +276,26 @@ const handler = async (req: Request): Promise<Response> => {
 
     await deleteQuery;
 
-    // Insert new analysis results
+    // Insert new analysis results in batches to avoid timeout
     if (cacheData.length > 0) {
-      const { error: insertError } = await supabaseClient
-        .from('influencer_spending_analysis')
-        .insert(cacheData);
+      const insertBatchSize = 1000;
+      let insertedCount = 0;
+      
+      for (let i = 0; i < cacheData.length; i += insertBatchSize) {
+        const batch = cacheData.slice(i, i + insertBatchSize);
+        const { error: insertError } = await supabaseClient
+          .from('influencer_spending_analysis')
+          .insert(batch);
 
-      if (insertError) {
-        console.error('Failed to save analysis results:', insertError);
-      } else {
-        console.log(`Successfully cached ${cacheData.length} analysis results`);
+        if (insertError) {
+          console.error(`Failed to save analysis batch ${i}-${i + batch.length}:`, insertError);
+        } else {
+          insertedCount += batch.length;
+          console.log(`Successfully cached batch ${i}-${i + batch.length} (${insertedCount}/${cacheData.length} total)`);
+        }
       }
+      
+      console.log(`Successfully cached ${insertedCount} analysis results total`);
     }
 
     console.log('=== OPTIMIZED ANALYSIS END ===');
