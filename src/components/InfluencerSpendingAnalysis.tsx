@@ -28,7 +28,7 @@ type SpendingAnalysis = {
   last_order_date: string | null;
   average_order_value: number;
   analysis_date: string;
-  influencers: {
+  influencer: {
     name: string | null;
     instagram_handle: string | null;
     category: string | null;
@@ -89,7 +89,16 @@ const InfluencerSpendingAnalysis = () => {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as SpendingAnalysis[];
+      
+      // Transform the data to match the expected structure
+      return data.map(item => ({
+        ...item,
+        influencer: item.influencers ? {
+          name: item.influencers.name,
+          instagram_handle: item.influencers.instagram_handle,
+          category: item.influencers.category,
+        } : null
+      })) as SpendingAnalysis[];
     },
     enabled: !!user && !!selectedClient,
   });
