@@ -9,6 +9,66 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      creator_gifts: {
+        Row: {
+          amount: number
+          brand_name: string
+          created_at: string
+          creator_email: string
+          creator_id: string
+          draft_order_shopify_id: string | null
+          id: string
+          order_shopify_id: string | null
+          page_campaign_fixed_subdomain: string | null
+          page_campaign_name: string | null
+          page_campaign_subdomain: string | null
+          products: Json | null
+          quantity: number
+          updated_at: string
+          user_id: string
+          webhook_created_at: string | null
+          webhook_updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          brand_name: string
+          created_at?: string
+          creator_email: string
+          creator_id: string
+          draft_order_shopify_id?: string | null
+          id?: string
+          order_shopify_id?: string | null
+          page_campaign_fixed_subdomain?: string | null
+          page_campaign_name?: string | null
+          page_campaign_subdomain?: string | null
+          products?: Json | null
+          quantity?: number
+          updated_at?: string
+          user_id: string
+          webhook_created_at?: string | null
+          webhook_updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          brand_name?: string
+          created_at?: string
+          creator_email?: string
+          creator_id?: string
+          draft_order_shopify_id?: string | null
+          id?: string
+          order_shopify_id?: string | null
+          page_campaign_fixed_subdomain?: string | null
+          page_campaign_name?: string | null
+          page_campaign_subdomain?: string | null
+          products?: Json | null
+          quantity?: number
+          updated_at?: string
+          user_id?: string
+          webhook_created_at?: string | null
+          webhook_updated_at?: string | null
+        }
+        Relationships: []
+      }
       customer_orders: {
         Row: {
           created_at: string

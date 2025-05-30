@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Users } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,6 +7,7 @@ import InfluencerTable from '@/components/InfluencerTable';
 import InfluencerUploadDialog from '@/components/InfluencerUploadDialog';
 import EmptyInfluencerState from '@/components/EmptyInfluencerState';
 import CustomerOrdersUpload from '@/components/CustomerOrdersUpload';
+import CreatorGiftManagement from '@/components/CreatorGiftManagement';
 import { useInfluencers } from '@/hooks/useInfluencers';
 
 type Influencer = {
@@ -49,6 +49,7 @@ const Influencers = () => {
         <TabsList>
           <TabsTrigger value="influencers">Influencers</TabsTrigger>
           <TabsTrigger value="customer-upload">Customer Data Upload</TabsTrigger>
+          <TabsTrigger value="creator-gifts">Creator Gifts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="influencers" className="space-y-6">
@@ -78,6 +79,10 @@ const Influencers = () => {
 
         <TabsContent value="customer-upload">
           <CustomerOrdersUpload />
+        </TabsContent>
+
+        <TabsContent value="creator-gifts">
+          <CreatorGiftManagement />
         </TabsContent>
       </Tabs>
     </div>
