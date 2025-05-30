@@ -25,9 +25,34 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
       };
     }
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    // Parse the header line - handle both quoted and unquoted CSV
+    const headers = lines[0].split('\t').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
     
     console.log('CSV Headers found:', headers);
+
+    // Map the Shopify customer CSV headers based on the format provided
+    const headerMap: { [key: string]: string } = {
+      'customer id': 'customer_id',
+      'first name': 'first_name', 
+      'last name': 'last_name',
+      'email': 'email',
+      'accepts email marketing': 'accepts_email_marketing',
+      'default address company': 'company',
+      'default address address1': 'address1',
+      'default address address2': 'address2', 
+      'default address city': 'city',
+      'default address province code': 'province_code',
+      'default address country code': 'country_code',
+      'default address zip': 'zip',
+      'default address phone': 'default_phone',
+      'phone': 'phone',
+      'accepts sms marketing': 'accepts_sms_marketing',
+      'total spent': 'total_spent',
+      'total orders': 'total_orders',
+      'note': 'note',
+      'tax exempt': 'tax_exempt',
+      'tags': 'tags'
+    };
 
     // Check if we have required Shopify headers
     const requiredShopifyHeaders = ['email'];
@@ -46,30 +71,33 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
     const parsedData: ParsedCustomerData[] = [];
     
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/['"]/g, ''));
-      const customerData: Partial<ParsedCustomerData> = {};
+      // Handle tab-separated values (Shopify format)
+      const values = lines[i].split('\t').map(v => v.trim().replace(/['"]/g, ''));
+      
+      let customerData: Partial<ParsedCustomerData> = {};
+      let firstName = '';
+      let lastName = '';
       
       headers.forEach((header, index) => {
         const value = values[index];
+        const normalizedHeader = header.toLowerCase().trim();
+        
         if (value && value.trim()) {
-          switch (header) {
+          switch (normalizedHeader) {
             case 'email':
               customerData.customer_email = value;
               break;
             case 'first name':
-              customerData.customer_name = value;
+              firstName = value;
               break;
             case 'last name':
-              if (customerData.customer_name) {
-                customerData.customer_name += ` ${value}`;
-              } else {
-                customerData.customer_name = value;
-              }
+              lastName = value;
               break;
             case 'customer id':
               customerData.order_id = value;
               break;
             case 'total spent':
+              // Parse the total spent value, removing any currency symbols
               const totalSpent = parseFloat(value.replace(/[$,]/g, ''));
               if (!isNaN(totalSpent)) {
                 customerData.order_total = totalSpent;
@@ -79,14 +107,24 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
         }
       });
 
-      // For Shopify customer data, we'll create synthetic order data
+      // Combine first and last name
+      if (firstName || lastName) {
+        customerData.customer_name = [firstName, lastName].filter(Boolean).join(' ');
+      }
+
+      // Create the customer record if we have the required email
       if (customerData.customer_email) {
+        // Use customer ID as order ID, or generate one
         if (!customerData.order_id) {
           customerData.order_id = `CUST-${Date.now()}-${i}`;
         }
+        
+        // Default to 0 if no total spent found
         if (!customerData.order_total) {
           customerData.order_total = 0;
         }
+        
+        // Set current date as order date for customer data
         if (!customerData.order_date) {
           customerData.order_date = new Date().toISOString().split('T')[0];
         }
@@ -103,11 +141,15 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
       };
     }
 
+    console.log(`Successfully parsed ${parsedData.length} customer records`);
+    console.log('Sample parsed data:', parsedData.slice(0, 3));
+
     return {
       success: true,
       data: parsedData
     };
   } catch (error) {
+    console.error('CSV parsing error:', error);
     return {
       success: false,
       data: [],
