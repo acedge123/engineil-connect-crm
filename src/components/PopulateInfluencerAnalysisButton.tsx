@@ -20,12 +20,13 @@ const PopulateInfluencerAnalysisButton = () => {
     setIsPopulating(true);
     
     try {
+      console.log('=== DEBUGGING EMAIL MATCHING PROCESS ===');
       console.log('Starting to populate influencer spending analysis...');
       
-      // First, get all influencers
+      // First, get all influencers with detailed logging
       const { data: influencers, error: influencersError } = await supabase
         .from('influencers')
-        .select('id, email')
+        .select('id, email, name')
         .eq('user_id', user.id);
 
       if (influencersError) {
@@ -33,14 +34,21 @@ const PopulateInfluencerAnalysisButton = () => {
         throw influencersError;
       }
 
-      console.log(`Found ${influencers?.length || 0} influencers`);
-
+      console.log(`Found ${influencers?.length || 0} influencers in database`);
+      
       if (!influencers || influencers.length === 0) {
         toast.error('No influencers found');
         return;
       }
 
-      // Get all customer orders
+      // Log first 10 influencer emails for debugging
+      console.log('Sample influencer emails:', influencers.slice(0, 10).map(inf => ({
+        id: inf.id,
+        email: inf.email,
+        name: inf.name
+      })));
+
+      // Get all customer orders with detailed logging
       const { data: customerOrders, error: ordersError } = await supabase
         .from('customer_orders')
         .select('id, customer_email, customer_name, order_total')
@@ -51,18 +59,37 @@ const PopulateInfluencerAnalysisButton = () => {
         throw ordersError;
       }
 
-      console.log(`Found ${customerOrders?.length || 0} customer orders`);
+      console.log(`Found ${customerOrders?.length || 0} customer orders in database`);
 
       if (!customerOrders || customerOrders.length === 0) {
         toast.error('No customer orders found');
         return;
       }
 
-      // Create a map of email to total spent
+      // Log first 10 customer emails for debugging
+      console.log('Sample customer emails:', customerOrders.slice(0, 10).map(order => ({
+        id: order.id,
+        email: order.customer_email,
+        name: order.customer_name,
+        total: order.order_total
+      })));
+
+      // Create sets of unique emails for comparison
+      const influencerEmails = new Set(influencers.map(inf => inf.email.toLowerCase().trim()));
+      const customerEmails = new Set(customerOrders.map(order => order.customer_email.toLowerCase().trim()));
+
+      console.log(`Unique influencer emails: ${influencerEmails.size}`);
+      console.log(`Unique customer emails: ${customerEmails.size}`);
+
+      // Find overlapping emails
+      const matchingEmails = [...influencerEmails].filter(email => customerEmails.has(email));
+      console.log(`Found ${matchingEmails.length} matching emails:`, matchingEmails.slice(0, 10));
+
+      // Create a map of email to total spent (normalized emails)
       const emailSpendingMap = new Map<string, { totalSpent: number, customerName: string | null, orderIds: string[] }>();
 
       customerOrders.forEach(order => {
-        const email = order.customer_email.toLowerCase();
+        const email = order.customer_email.toLowerCase().trim();
         const existing = emailSpendingMap.get(email);
         
         if (existing) {
@@ -79,16 +106,18 @@ const PopulateInfluencerAnalysisButton = () => {
 
       console.log(`Created spending map for ${emailSpendingMap.size} unique customer emails`);
 
-      // Find matches and prepare analysis records
+      // Find matches and prepare analysis records with detailed logging
       const analysisRecords = [];
       let matchCount = 0;
+      let unmatchedInfluencers = [];
 
       for (const influencer of influencers) {
-        const influencerEmail = influencer.email.toLowerCase();
+        const influencerEmail = influencer.email.toLowerCase().trim();
         const customerData = emailSpendingMap.get(influencerEmail);
         
         if (customerData) {
           matchCount++;
+          console.log(`MATCH FOUND: ${influencer.email} -> ${customerData.totalSpent} spent across ${customerData.orderIds.length} orders`);
           
           // Create one record per order for this influencer-customer match
           for (const orderId of customerData.orderIds) {
@@ -102,13 +131,25 @@ const PopulateInfluencerAnalysisButton = () => {
               shopify_client_id: null
             });
           }
+        } else {
+          unmatchedInfluencers.push(influencer.email);
         }
       }
 
-      console.log(`Found ${matchCount} email matches, creating ${analysisRecords.length} analysis records`);
+      console.log(`=== MATCHING SUMMARY ===`);
+      console.log(`Total influencers: ${influencers.length}`);
+      console.log(`Total customer orders: ${customerOrders.length}`);
+      console.log(`Unique influencer emails: ${influencerEmails.size}`);
+      console.log(`Unique customer emails: ${customerEmails.size}`);
+      console.log(`Email matches found: ${matchCount}`);
+      console.log(`Analysis records to create: ${analysisRecords.length}`);
+      console.log(`First 10 unmatched influencer emails:`, unmatchedInfluencers.slice(0, 10));
 
       if (analysisRecords.length === 0) {
         toast.warning('No matching emails found between influencers and customer orders');
+        console.log('=== NO MATCHES - DETAILED DEBUG ===');
+        console.log('Influencer emails (first 20):', Array.from(influencerEmails).slice(0, 20));
+        console.log('Customer emails (first 20):', Array.from(customerEmails).slice(0, 20));
         return;
       }
 
@@ -143,6 +184,7 @@ const PopulateInfluencerAnalysisButton = () => {
         console.log(`Inserted batch ${Math.floor(i / batchSize) + 1}, total records: ${insertedCount}`);
       }
 
+      console.log(`=== FINAL RESULTS ===`);
       console.log(`Successfully populated ${insertedCount} analysis records from ${matchCount} email matches`);
       toast.success(`Successfully created ${insertedCount} analysis records from ${matchCount} matching emails`);
       
