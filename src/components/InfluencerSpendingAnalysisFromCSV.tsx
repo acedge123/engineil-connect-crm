@@ -46,13 +46,21 @@ type ShopifyClient = {
   shopify_url: string;
 };
 
+type Influencer = {
+  id: string;
+  email: string;
+  name?: string;
+  instagram_handle?: string;
+  category?: string;
+};
+
 const InfluencerSpendingAnalysisFromCSV = () => {
   const { user } = useAuth();
   const [analysisResults, setAnalysisResults] = useState<InfluencerSpendingResult[]>([]);
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
 
-  // Fetch Shopify clients
-  const shopifyClientsQuery = useQuery({
+  // Fetch Shopify clients with explicit typing
+  const shopifyClientsQuery = useQuery<ShopifyClient[]>({
     queryKey: ['shopify-clients'],
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
@@ -71,8 +79,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
 
   const shopifyClients = shopifyClientsQuery.data;
 
-  // Fetch customer orders
-  const customerOrdersQuery = useQuery({
+  // Fetch customer orders with explicit typing
+  const customerOrdersQuery = useQuery<CustomerOrder[]>({
     queryKey: ['customer-orders', selectedShopifyClient],
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
@@ -100,8 +108,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
   const customerOrders = customerOrdersQuery.data;
   const ordersLoading = customerOrdersQuery.isLoading;
 
-  // Fetch influencers
-  const influencersQuery = useQuery({
+  // Fetch influencers with explicit typing
+  const influencersQuery = useQuery<Influencer[]>({
     queryKey: ['influencers'],
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
@@ -119,8 +127,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
 
   const influencers = influencersQuery.data;
 
-  // Analyze spending mutation
-  const analyzeSpendingMutation = useMutation({
+  // Analyze spending mutation with explicit typing
+  const analyzeSpendingMutation = useMutation<InfluencerSpendingResult[], Error>({
     mutationFn: async () => {
       if (!user || !customerOrders || !influencers) {
         throw new Error('Missing required data for analysis');

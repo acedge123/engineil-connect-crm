@@ -36,10 +36,10 @@ const CustomerOrdersUpload = () => {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
 
-  // Fetch Shopify clients with simplified query
-  const shopifyClientsQuery = useQuery({
-    queryKey: ['shopify-clients'] as const,
-    queryFn: async (): Promise<ShopifyClient[]> => {
+  // Fetch Shopify clients with explicit typing
+  const shopifyClientsQuery = useQuery<ShopifyClient[]>({
+    queryKey: ['shopify-clients'],
+    queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
       
       const { data, error } = await supabase
@@ -56,9 +56,9 @@ const CustomerOrdersUpload = () => {
 
   const shopifyClients = shopifyClientsQuery.data;
 
-  // CSV upload mutation with simplified type handling
-  const uploadCsvMutation = useMutation({
-    mutationFn: async (file: File): Promise<any[]> => {
+  // CSV upload mutation with explicit typing
+  const uploadCsvMutation = useMutation<CustomerOrderInsert[], Error, File>({
+    mutationFn: async (file: File) => {
       if (!user) throw new Error('User not authenticated');
 
       const text = await file.text();
