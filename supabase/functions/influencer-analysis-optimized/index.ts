@@ -107,87 +107,74 @@ const handler = async (req: Request): Promise<Response> => {
     `;
 
     console.log('Executing optimized analysis query...');
-    const { data: analysisData, error: queryError } = await supabaseClient
-      .rpc('execute_analysis_query', {
-        query_text: analysisQuery,
-        user_param: user.id
-      });
+    
+    // Execute the query directly using the Supabase client
+    const { data: directResults, error: directError } = await supabaseClient
+      .from('influencers')
+      .select(`
+        id,
+        email,
+        name,
+        instagram_handle,
+        category,
+        customer_orders!left (
+          order_total,
+          order_date,
+          customer_name,
+          shopify_client_id
+        )
+      `)
+      .eq('user_id', user.id);
 
-    // If RPC doesn't exist, fall back to direct query execution
-    let results;
-    if (queryError) {
-      console.log('RPC not available, using direct query execution...');
-      
-      // Execute the query directly using the Supabase client
-      const { data: directResults, error: directError } = await supabaseClient
-        .from('influencers')
-        .select(`
-          id,
-          email,
-          name,
-          instagram_handle,
-          category,
-          customer_orders!left (
-            order_total,
-            order_date,
-            customer_name,
-            shopify_client_id
-          )
-        `)
-        .eq('user_id', user.id);
+    if (directError) {
+      throw new Error(`Failed to fetch analysis data: ${directError.message}`);
+    }
 
-      if (directError) {
-        throw new Error(`Failed to fetch analysis data: ${directError.message}`);
+    // Process the results in JavaScript
+    const results = directResults.map(influencer => {
+      // Filter customer orders based on shopify_client_id
+      let filteredOrders = influencer.customer_orders || [];
+      if (shopify_client_id && shopify_client_id !== 'default') {
+        filteredOrders = filteredOrders.filter(order => order.shopify_client_id === shopify_client_id);
+      } else {
+        filteredOrders = filteredOrders.filter(order => !order.shopify_client_id);
       }
 
-      // Process the results in JavaScript
-      results = directResults.map(influencer => {
-        // Filter customer orders based on shopify_client_id
-        let filteredOrders = influencer.customer_orders || [];
-        if (shopify_client_id && shopify_client_id !== 'default') {
-          filteredOrders = filteredOrders.filter(order => order.shopify_client_id === shopify_client_id);
-        } else {
-          filteredOrders = filteredOrders.filter(order => !order.shopify_client_id);
-        }
+      const totalSpent = filteredOrders.reduce((sum, order) => sum + (order.order_total || 0), 0);
+      const orderCount = filteredOrders.length;
+      const averageOrderValue = orderCount > 0 ? totalSpent / orderCount : 0;
 
-        const totalSpent = filteredOrders.reduce((sum, order) => sum + (order.order_total || 0), 0);
-        const orderCount = filteredOrders.length;
-        const averageOrderValue = orderCount > 0 ? totalSpent / orderCount : 0;
+      // Get date range
+      const validOrderDates = filteredOrders
+        .filter(order => order.order_date && order.order_date.trim() !== '')
+        .map(order => new Date(order.order_date));
+      
+      let firstOrderDate = '';
+      let lastOrderDate = '';
+      
+      if (validOrderDates.length > 0) {
+        const firstDate = new Date(Math.min(...validOrderDates.map(d => d.getTime())));
+        const lastDate = new Date(Math.max(...validOrderDates.map(d => d.getTime())));
+        firstOrderDate = firstDate.toISOString();
+        lastOrderDate = lastDate.toISOString();
+      }
 
-        // Get date range
-        const validOrderDates = filteredOrders
-          .filter(order => order.order_date && order.order_date.trim() !== '')
-          .map(order => new Date(order.order_date));
-        
-        let firstOrderDate = '';
-        let lastOrderDate = '';
-        
-        if (validOrderDates.length > 0) {
-          const firstDate = new Date(Math.min(...validOrderDates.map(d => d.getTime())));
-          const lastDate = new Date(Math.max(...validOrderDates.map(d => d.getTime())));
-          firstOrderDate = firstDate.toISOString();
-          lastOrderDate = lastDate.toISOString();
-        }
+      const customerName = filteredOrders.find(order => order.customer_name)?.customer_name;
 
-        const customerName = filteredOrders.find(order => order.customer_name)?.customer_name;
-
-        return {
-          influencer_id: influencer.id,
-          customer_email: influencer.email,
-          influencer_name: influencer.name,
-          instagram_handle: influencer.instagram_handle,
-          category: influencer.category,
-          total_spent: totalSpent,
-          order_count: orderCount,
-          first_order_date: firstOrderDate,
-          last_order_date: lastOrderDate,
-          average_order_value: averageOrderValue,
-          customer_names: customerName
-        };
-      });
-    } else {
-      results = analysisData;
-    }
+      return {
+        influencer_id: influencer.id,
+        customer_email: influencer.email,
+        influencer_name: influencer.name,
+        instagram_handle: influencer.instagram_handle,
+        category: influencer.category,
+        total_spent: totalSpent,
+        order_count: orderCount,
+        first_order_date: firstOrderDate,
+        last_order_date: lastOrderDate,
+        average_order_value: averageOrderValue,
+        customer_names: customerName
+      };
+    });
 
     console.log(`Analysis completed. Found ${results.length} influencers.`);
 
@@ -220,7 +207,7 @@ const handler = async (req: Request): Promise<Response> => {
     }));
 
     // Save results to database for caching
-    const analysisData = formattedResults.map(result => ({
+    const cacheData = formattedResults.map(result => ({
       user_id: user.id,
       influencer_id: result.influencer_id,
       customer_email: result.customer_email,
@@ -251,7 +238,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Insert new analysis results
     const { error: insertError } = await supabaseClient
       .from('influencer_spending_analysis')
-      .insert(analysisData);
+      .insert(cacheData);
 
     if (insertError) {
       console.error('Failed to save analysis results:', insertError);
