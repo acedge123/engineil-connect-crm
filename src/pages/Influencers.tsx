@@ -1,8 +1,7 @@
 
 import React, { useState } from 'react';
-import { Users, BarChart3 } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import InfluencerSpendingAnalysisFromCSV from '@/components/InfluencerSpendingAnalysisFromCSV';
 import InfluencerForm from '@/components/InfluencerForm';
 import InfluencerStats from '@/components/InfluencerStats';
 import InfluencerTable from '@/components/InfluencerTable';
@@ -41,51 +40,32 @@ const Influencers = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Influencers</h1>
-          <p className="text-gray-600 mt-2">Manage your influencer database and analyze their spending patterns</p>
+          <p className="text-gray-600 mt-2">Manage your influencer database</p>
         </div>
       </div>
 
-      <Tabs defaultValue="database" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="database">
-            <Users className="w-4 h-4 mr-2" />
-            Influencer Database
-          </TabsTrigger>
-          <TabsTrigger value="analysis">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Spending Analysis
-          </TabsTrigger>
-        </TabsList>
+      <div className="flex justify-end gap-2">
+        <InfluencerUploadDialog />
+        <InfluencerForm
+          editingInfluencer={editingInfluencer}
+          onEditingChange={setEditingInfluencer}
+        />
+      </div>
 
-        <TabsContent value="database" className="space-y-6">
-          <div className="flex justify-end gap-2">
-            <InfluencerUploadDialog />
-            <InfluencerForm
-              editingInfluencer={editingInfluencer}
-              onEditingChange={setEditingInfluencer}
-            />
-          </div>
+      <InfluencerStats influencers={influencers} />
 
-          <InfluencerStats influencers={influencers} />
-
-          {influencers && influencers.length > 0 ? (
-            <InfluencerTable
-              influencers={influencers}
-              onEdit={setEditingInfluencer}
-              onDelete={handleDelete}
-            />
-          ) : (
-            <EmptyInfluencerState
-              onAddInfluencer={() => setEditingInfluencer(null)}
-              onUploadCSV={() => {}}
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="analysis">
-          <InfluencerSpendingAnalysisFromCSV />
-        </TabsContent>
-      </Tabs>
+      {influencers && influencers.length > 0 ? (
+        <InfluencerTable
+          influencers={influencers}
+          onEdit={setEditingInfluencer}
+          onDelete={handleDelete}
+        />
+      ) : (
+        <EmptyInfluencerState
+          onAddInfluencer={() => setEditingInfluencer(null)}
+          onUploadCSV={() => {}}
+        />
+      )}
     </div>
   );
 };
