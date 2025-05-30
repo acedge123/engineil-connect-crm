@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Users, DollarSign, TrendingUp, Play, Download } from 'lucide-react';
@@ -51,10 +52,10 @@ const InfluencerSpendingAnalysisFromCSV = () => {
   const [analysisResults, setAnalysisResults] = useState<InfluencerSpendingResult[]>([]);
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
 
-  // Fetch Shopify clients
-  const { data: shopifyClients } = useQuery({
-    queryKey: ['shopify-clients'],
-    queryFn: async () => {
+  // Fetch Shopify clients with simplified query
+  const shopifyClientsQuery = useQuery({
+    queryKey: ['shopify-clients'] as const,
+    queryFn: async (): Promise<ShopifyClient[]> => {
       if (!user) throw new Error('User not authenticated');
       
       const { data, error } = await supabase
@@ -64,15 +65,17 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         .order('client_name');
 
       if (error) throw error;
-      return data as ShopifyClient[];
+      return data || [];
     },
     enabled: !!user,
   });
 
-  // Fetch customer orders
-  const { data: customerOrders, isLoading: ordersLoading } = useQuery({
-    queryKey: ['customer-orders', selectedShopifyClient],
-    queryFn: async () => {
+  const shopifyClients = shopifyClientsQuery.data;
+
+  // Fetch customer orders with simplified query
+  const customerOrdersQuery = useQuery({
+    queryKey: ['customer-orders', selectedShopifyClient] as const,
+    queryFn: async (): Promise<CustomerOrder[]> => {
       if (!user) throw new Error('User not authenticated');
       
       let query = supabase
@@ -90,14 +93,17 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       const { data, error } = await query;
 
       if (error) throw error;
-      return data as CustomerOrder[];
+      return data || [];
     },
     enabled: !!user,
   });
 
-  // Fetch influencers
-  const { data: influencers } = useQuery({
-    queryKey: ['influencers'],
+  const customerOrders = customerOrdersQuery.data;
+  const ordersLoading = customerOrdersQuery.isLoading;
+
+  // Fetch influencers with simplified query
+  const influencersQuery = useQuery({
+    queryKey: ['influencers'] as const,
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
       
@@ -107,14 +113,16 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         .eq('user_id', user.id);
 
       if (error) throw error;
-      return data;
+      return data || [];
     },
     enabled: !!user,
   });
 
-  // Analyze spending mutation
+  const influencers = influencersQuery.data;
+
+  // Analyze spending mutation with simplified type handling
   const analyzeSpendingMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<InfluencerSpendingResult[]> => {
       if (!user || !customerOrders || !influencers) {
         throw new Error('Missing required data for analysis');
       }
@@ -201,7 +209,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         first_order_date: result.first_order_date || null,
         last_order_date: result.last_order_date || null,
         average_order_value: result.average_order_value,
-        shopify_client_id: selectedShopifyClient || null,
+        shopify_client_id: selectedShopifyClient === 'default' ? null : selectedShopifyClient,
         analysis_date: new Date().toISOString(),
       }));
 
@@ -211,7 +219,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         .delete()
         .eq('user_id', user.id);
 
-      if (selectedShopifyClient) {
+      if (selectedShopifyClient && selectedShopifyClient !== 'default') {
         deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
       } else {
         deleteQuery = deleteQuery.is('shopify_client_id', null);
@@ -231,19 +239,19 @@ const InfluencerSpendingAnalysisFromCSV = () => {
     },
     onSuccess: (results) => {
       setAnalysisResults(results);
-      const clientName = selectedShopifyClient 
+      const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
         ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
         : 'Default';
       toast.success(`Analysis complete for ${clientName}! Found ${results.filter(r => r.total_spent > 0).length} influencers with orders`);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error(`Analysis failed: ${error.message}`);
     },
   });
 
   const handleAnalyze = () => {
     if (!customerOrders || customerOrders.length === 0) {
-      const clientName = selectedShopifyClient 
+      const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
         ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'selected client'
         : 'default client';
       toast.error(`Please upload customer orders data for ${clientName} first`);
@@ -262,7 +270,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       return;
     }
 
-    const clientName = selectedShopifyClient 
+    const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
       ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'SelectedClient'
       : 'Default';
 

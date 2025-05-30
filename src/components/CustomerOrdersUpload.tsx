@@ -36,10 +36,10 @@ const CustomerOrdersUpload = () => {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
 
-  // Fetch Shopify clients
-  const { data: shopifyClients } = useQuery({
-    queryKey: ['shopify-clients'],
-    queryFn: async () => {
+  // Fetch Shopify clients with simplified query
+  const shopifyClientsQuery = useQuery({
+    queryKey: ['shopify-clients'] as const,
+    queryFn: async (): Promise<ShopifyClient[]> => {
       if (!user) throw new Error('User not authenticated');
       
       const { data, error } = await supabase
@@ -49,14 +49,16 @@ const CustomerOrdersUpload = () => {
         .order('client_name');
 
       if (error) throw error;
-      return data as ShopifyClient[];
+      return data || [];
     },
     enabled: !!user,
   });
 
-  // CSV upload mutation
+  const shopifyClients = shopifyClientsQuery.data;
+
+  // CSV upload mutation with simplified type handling
   const uploadCsvMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (file: File): Promise<any[]> => {
       if (!user) throw new Error('User not authenticated');
 
       const text = await file.text();
@@ -84,8 +86,8 @@ const CustomerOrdersUpload = () => {
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
           
-          // Initialize order with required fields
-          const order: CustomerOrderInsert = {
+          // Create order object step by step
+          const baseOrder: CustomerOrderInsert = {
             user_id: user.id,
             customer_email: '',
             order_id: '',
@@ -93,10 +95,10 @@ const CustomerOrdersUpload = () => {
             order_date: new Date().toISOString().split('T')[0],
           };
 
-          // Only add shopify_client_id if a specific client is selected
-          if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-            order.shopify_client_id = selectedShopifyClient;
-          }
+          // Add shopify_client_id conditionally
+          const order: CustomerOrderInsert = selectedShopifyClient && selectedShopifyClient !== 'default'
+            ? { ...baseOrder, shopify_client_id: selectedShopifyClient }
+            : baseOrder;
 
           let firstName = '';
           let lastName = '';
@@ -172,7 +174,7 @@ const CustomerOrdersUpload = () => {
           .select();
 
         if (error) throw error;
-        return data;
+        return data || [];
       } else {
         // Original custom format processing
         const requiredHeaders = ['customer_email', 'order_id', 'order_total', 'order_date'];
@@ -186,7 +188,7 @@ const CustomerOrdersUpload = () => {
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
           
-          const order: CustomerOrderInsert = {
+          const baseOrder: CustomerOrderInsert = {
             user_id: user.id,
             customer_email: '',
             order_id: '',
@@ -194,10 +196,10 @@ const CustomerOrdersUpload = () => {
             order_date: '',
           };
 
-          // Only add shopify_client_id if a specific client is selected
-          if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-            order.shopify_client_id = selectedShopifyClient;
-          }
+          // Add shopify_client_id conditionally
+          const order: CustomerOrderInsert = selectedShopifyClient && selectedShopifyClient !== 'default'
+            ? { ...baseOrder, shopify_client_id: selectedShopifyClient }
+            : baseOrder;
           
           headers.forEach((header, index) => {
             const value = values[index];
@@ -260,7 +262,7 @@ const CustomerOrdersUpload = () => {
           .select();
 
         if (error) throw error;
-        return data;
+        return data || [];
       }
     },
     onSuccess: (data) => {
@@ -273,7 +275,7 @@ const CustomerOrdersUpload = () => {
         : 'default';
       toast.success(`Successfully uploaded ${data.length} customer records for ${clientName}`);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error(`Failed to upload CSV: ${error.message}`);
     },
   });
