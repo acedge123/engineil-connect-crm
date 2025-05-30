@@ -10,6 +10,7 @@ import ClientSelector from './ClientSelector';
 import CustomerOrderUploadDialog from './CustomerOrderUploadDialog';
 import InfluencerCustomerLinkDialog from './InfluencerCustomerLinkDialog';
 import InfluencerSpendingTable from './InfluencerSpendingTable';
+import PopulateInfluencerAnalysisButton from './PopulateInfluencerAnalysisButton';
 import { useInfluencerSpendingAnalysis } from '@/hooks/useInfluencerSpendingAnalysis';
 
 type ShopifyClient = {
@@ -64,7 +65,7 @@ const CustomerOrdersUpload = () => {
             shopifyClients={shopifyClients}
           />
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <CustomerOrderUploadDialog
               selectedShopifyClient={selectedShopifyClient}
               isOpen={isUploadDialogOpen}
@@ -74,6 +75,8 @@ const CustomerOrdersUpload = () => {
             <InfluencerCustomerLinkDialog 
               selectedShopifyClient={selectedShopifyClient}
             />
+
+            <PopulateInfluencerAnalysisButton />
           </div>
         </CardContent>
       </Card>
