@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 
@@ -56,12 +55,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Analyzing for user: ${user.id}`);
 
-    // Step 1: Fetch all influencers for this user
+    // Step 1: Fetch all influencers (removed user_id filter)
     console.log('Fetching influencers...');
     const { data: influencers, error: influencersError } = await supabaseClient
       .from('influencers')
-      .select('id, email, name, instagram_handle, category')
-      .eq('user_id', user.id);
+      .select('id, email, name, instagram_handle, category');
 
     if (influencersError) {
       throw new Error(`Failed to fetch influencers: ${influencersError.message}`);
@@ -69,12 +67,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Found ${influencers?.length || 0} influencers`);
 
-    // Step 2: Fetch customer orders based on shopify_client_id filter
+    // Step 2: Fetch customer orders based on shopify_client_id filter (removed user_id filter)
     console.log('Fetching customer orders...');
     let ordersQuery = supabaseClient
       .from('customer_orders')
-      .select('customer_email, customer_name, order_total, order_date')
-      .eq('user_id', user.id);
+      .select('customer_email, customer_name, order_total, order_date');
 
     // Apply shopify_client_id filter
     if (shopify_client_id && shopify_client_id !== 'default') {
@@ -165,7 +162,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Total spending: $${totalSpending.toFixed(2)}`);
     console.log(`Total orders: ${totalOrders}`);
 
-    // Save results to database for caching
+    // Save results to database for caching (keep user_id for cache ownership)
     const cacheData = results.map(result => ({
       user_id: user.id,
       influencer_id: result.influencer_id,
