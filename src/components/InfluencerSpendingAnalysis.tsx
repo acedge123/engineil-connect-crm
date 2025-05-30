@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Play, RefreshCw, TrendingUp, DollarSign, ShoppingCart, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { useInfluencerAnalysis } from '@/hooks/useInfluencerAnalysis';
 
 type ShopifyClient = {
   id: string;
@@ -36,9 +37,7 @@ type SpendingAnalysis = {
 
 const InfluencerSpendingAnalysis = () => {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Fetch Shopify clients
   const { data: shopifyClients } = useQuery({
@@ -55,13 +54,20 @@ const InfluencerSpendingAnalysis = () => {
     enabled: !!user,
   });
 
-  // Fetch spending analysis results
+  // Use the same hook as the CSV analysis component
+  const { 
+    analysisResults, 
+    isAnalyzing, 
+    handleAnalyze 
+  } = useInfluencerAnalysis(selectedClient, shopifyClients);
+
+  // Fetch cached analysis results from database
   const { data: analysisData, isLoading } = useQuery({
     queryKey: ['influencer-spending-analysis', selectedClient],
     queryFn: async () => {
       if (!selectedClient) return [];
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('influencer_spending_analysis')
         .select(`
           *,
@@ -70,52 +76,22 @@ const InfluencerSpendingAnalysis = () => {
             instagram_handle,
             category
           )
-        `)
-        .eq('shopify_client_id', selectedClient)
-        .order('total_spent', { ascending: false });
+        `);
+      
+      // Handle client filtering
+      if (selectedClient === 'default') {
+        query = query.is('shopify_client_id', null);
+      } else {
+        query = query.eq('shopify_client_id', selectedClient);
+      }
+      
+      query = query.order('total_spent', { ascending: false });
 
+      const { data, error } = await query;
       if (error) throw error;
       return data as SpendingAnalysis[];
     },
     enabled: !!user && !!selectedClient,
-  });
-
-  // Run analysis mutation
-  const runAnalysisMutation = useMutation({
-    mutationFn: async (clientId: string) => {
-      if (!user) throw new Error('User not authenticated');
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No active session');
-
-      const response = await fetch(
-        `https://nljhbmgbgqqcaxqbvghs.supabase.co/functions/v1/analyze-influencer-spending`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            shopify_client_id: clientId,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Analysis failed');
-      }
-
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['influencer-spending-analysis'] });
-      toast.success(`Analysis complete! Analyzed ${data.analyzed_influencers} influencers from ${data.total_orders} orders.`);
-    },
-    onError: (error) => {
-      toast.error(`Analysis failed: ${error.message}`);
-    },
   });
 
   const handleRunAnalysis = () => {
@@ -123,7 +99,7 @@ const InfluencerSpendingAnalysis = () => {
       toast.error('Please select a Shopify client first');
       return;
     }
-    runAnalysisMutation.mutate(selectedClient);
+    handleAnalyze();
   };
 
   const formatCurrency = (amount: number) => {
@@ -138,10 +114,13 @@ const InfluencerSpendingAnalysis = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  // Use live analysis results if available, otherwise use cached data
+  const displayData = analysisResults.length > 0 ? analysisResults : analysisData || [];
+  const spendingInfluencers = displayData.filter(item => item.total_spent > 0);
+
   // Calculate summary stats
-  const totalSpent = analysisData?.reduce((sum, item) => sum + item.total_spent, 0) || 0;
-  const totalOrders = analysisData?.reduce((sum, item) => sum + item.order_count, 0) || 0;
-  const spendingInfluencers = analysisData?.filter(item => item.total_spent > 0).length || 0;
+  const totalSpent = displayData.reduce((sum, item) => sum + item.total_spent, 0);
+  const totalOrders = displayData.reduce((sum, item) => sum + item.order_count, 0);
 
   return (
     <div className="space-y-6">
@@ -157,6 +136,7 @@ const InfluencerSpendingAnalysis = () => {
               <SelectValue placeholder="Select Shopify Client" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="default">Default (Four Visions)</SelectItem>
               {shopifyClients?.map((client) => (
                 <SelectItem key={client.id} value={client.id}>
                   {client.client_name}
@@ -167,10 +147,10 @@ const InfluencerSpendingAnalysis = () => {
           
           <Button
             onClick={handleRunAnalysis}
-            disabled={!selectedClient || runAnalysisMutation.isPending}
+            disabled={!selectedClient || isAnalyzing}
             className="bg-crm-blue hover:bg-blue-600"
           >
-            {runAnalysisMutation.isPending ? (
+            {isAnalyzing ? (
               <>
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                 Analyzing...
@@ -213,7 +193,7 @@ const InfluencerSpendingAnalysis = () => {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{spendingInfluencers}</div>
+                <div className="text-2xl font-bold">{spendingInfluencers.length}</div>
               </CardContent>
             </Card>
             <Card>
@@ -236,12 +216,12 @@ const InfluencerSpendingAnalysis = () => {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-crm-blue"></div>
               </CardContent>
             </Card>
-          ) : analysisData && analysisData.length > 0 ? (
+          ) : displayData && displayData.length > 0 ? (
             <Card>
               <CardHeader>
                 <CardTitle>Spending Analysis Results</CardTitle>
                 <CardDescription>
-                  Detailed breakdown of influencer spending behavior
+                  Showing {spendingInfluencers.length} influencers with orders (from {displayData.length} total analyzed)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -259,31 +239,33 @@ const InfluencerSpendingAnalysis = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {analysisData.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">
-                          <div>
-                            <div>{item.influencers?.name || item.customer_name || 'N/A'}</div>
-                            {item.influencers?.instagram_handle && (
-                              <div className="text-sm text-gray-500">{item.influencers.instagram_handle}</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{item.customer_email}</TableCell>
-                        <TableCell>{item.influencers?.category || 'N/A'}</TableCell>
-                        <TableCell className="font-semibold">
-                          <span className={item.total_spent > 0 ? 'text-green-600' : 'text-gray-500'}>
-                            {formatCurrency(item.total_spent)}
-                          </span>
-                        </TableCell>
-                        <TableCell>{item.order_count}</TableCell>
-                        <TableCell>
-                          {item.order_count > 0 ? formatCurrency(item.average_order_value) : 'N/A'}
-                        </TableCell>
-                        <TableCell>{formatDate(item.first_order_date)}</TableCell>
-                        <TableCell>{formatDate(item.last_order_date)}</TableCell>
-                      </TableRow>
-                    ))}
+                    {spendingInfluencers
+                      .sort((a, b) => b.total_spent - a.total_spent)
+                      .map((item) => (
+                        <TableRow key={item.influencer_id || item.customer_email}>
+                          <TableCell className="font-medium">
+                            <div>
+                              <div>{item.influencer?.name || item.customer_name || 'N/A'}</div>
+                              {item.influencer?.instagram_handle && (
+                                <div className="text-sm text-gray-500">{item.influencer.instagram_handle}</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{item.customer_email}</TableCell>
+                          <TableCell>{item.influencer?.category || 'N/A'}</TableCell>
+                          <TableCell className="font-semibold">
+                            <span className="text-green-600">
+                              {formatCurrency(item.total_spent)}
+                            </span>
+                          </TableCell>
+                          <TableCell>{item.order_count}</TableCell>
+                          <TableCell>
+                            {formatCurrency(item.average_order_value)}
+                          </TableCell>
+                          <TableCell>{formatDate(item.first_order_date)}</TableCell>
+                          <TableCell>{formatDate(item.last_order_date)}</TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -298,7 +280,7 @@ const InfluencerSpendingAnalysis = () => {
                 </CardDescription>
                 <Button
                   onClick={handleRunAnalysis}
-                  disabled={runAnalysisMutation.isPending}
+                  disabled={isAnalyzing}
                   className="bg-crm-blue hover:bg-blue-600"
                 >
                   <Play className="w-4 h-4 mr-2" />
