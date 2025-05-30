@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 interface CreatorGiftWebhookData {
-  creator_id: string;
+  creator_id?: string;
   creator_email: string;
   brand_name: string;
   amount: number;
@@ -21,7 +21,7 @@ interface CreatorGiftWebhookData {
   order_shopify_id?: string;
   webhook_created_at?: string;
   webhook_updated_at?: string;
-  user_id: string; // This should be provided in the webhook data to identify which user this gift belongs to
+  user_id?: string; // Optional - will use fallback if not provided
 }
 
 serve(async (req: Request) => {
@@ -48,9 +48,9 @@ serve(async (req: Request) => {
     console.log('Received creator gift webhook data:', webhookData);
 
     // Validate required fields
-    if (!webhookData.creator_id || !webhookData.creator_email || !webhookData.brand_name || !webhookData.user_id) {
+    if (!webhookData.creator_email || !webhookData.brand_name) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: creator_id, creator_email, brand_name, user_id' }),
+        JSON.stringify({ error: 'Missing required fields: creator_email, brand_name' }),
         { 
           status: 400, 
           headers: { 'Content-Type': 'application/json', ...corsHeaders } 
@@ -58,11 +58,36 @@ serve(async (req: Request) => {
       );
     }
 
+    // Use provided user_id or fallback to the main user (you can update this to your actual user ID)
+    let userId = webhookData.user_id;
+    
+    if (!userId) {
+      // Fallback: get the first user from the profiles table
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+      
+      if (profileError || !profiles || profiles.length === 0) {
+        console.error('No user found for fallback:', profileError);
+        return new Response(
+          JSON.stringify({ error: 'No user account found to associate this gift with' }),
+          { 
+            status: 400, 
+            headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+          }
+        );
+      }
+      
+      userId = profiles[0].id;
+      console.log('Using fallback user ID:', userId);
+    }
+
     // Insert the creator gift data
     const { data, error } = await supabase
       .from('creator_gifts')
       .insert({
-        creator_id: webhookData.creator_id,
+        creator_id: webhookData.creator_id || null,
         creator_email: webhookData.creator_email,
         brand_name: webhookData.brand_name,
         amount: webhookData.amount || 0,
@@ -75,13 +100,13 @@ serve(async (req: Request) => {
         order_shopify_id: webhookData.order_shopify_id,
         webhook_created_at: webhookData.webhook_created_at,
         webhook_updated_at: webhookData.webhook_updated_at,
-        user_id: webhookData.user_id
+        user_id: userId
       });
 
     if (error) {
       console.error('Error inserting creator gift:', error);
       return new Response(
-        JSON.stringify({ error: 'Failed to store creator gift data' }),
+        JSON.stringify({ error: 'Failed to store creator gift data', details: error.message }),
         { 
           status: 500, 
           headers: { 'Content-Type': 'application/json', ...corsHeaders } 
@@ -92,7 +117,7 @@ serve(async (req: Request) => {
     console.log('Creator gift stored successfully:', data);
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Creator gift data received and stored' }),
+      JSON.stringify({ success: true, message: 'Creator gift data received and stored', data }),
       { 
         status: 200, 
         headers: { 'Content-Type': 'application/json', ...corsHeaders } 
@@ -102,7 +127,7 @@ serve(async (req: Request) => {
   } catch (error) {
     console.error('Webhook processing error:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
       { 
         status: 500, 
         headers: { 'Content-Type': 'application/json', ...corsHeaders } 
