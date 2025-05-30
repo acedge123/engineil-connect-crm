@@ -20,10 +20,10 @@ const PopulateInfluencerAnalysisButton = () => {
     setIsPopulating(true);
     
     try {
-      console.log('=== DEBUGGING EMAIL MATCHING PROCESS ===');
+      console.log('=== STARTING EMAIL MATCHING PROCESS ===');
       console.log('Starting to populate influencer spending analysis...');
       
-      // First, get all influencers with detailed logging
+      // First, get all influencers
       const { data: influencers, error: influencersError } = await supabase
         .from('influencers')
         .select('id, email, name')
@@ -41,14 +41,7 @@ const PopulateInfluencerAnalysisButton = () => {
         return;
       }
 
-      // Log first 10 influencer emails for debugging
-      console.log('Sample influencer emails:', influencers.slice(0, 10).map(inf => ({
-        id: inf.id,
-        email: inf.email,
-        name: inf.name
-      })));
-
-      // Get all customer orders with detailed logging
+      // Get all customer orders
       const { data: customerOrders, error: ordersError } = await supabase
         .from('customer_orders')
         .select('id, customer_email, customer_name, order_total')
@@ -66,90 +59,74 @@ const PopulateInfluencerAnalysisButton = () => {
         return;
       }
 
-      // Log first 10 customer emails for debugging
-      console.log('Sample customer emails:', customerOrders.slice(0, 10).map(order => ({
-        id: order.id,
-        email: order.customer_email,
-        name: order.customer_name,
-        total: order.order_total
-      })));
+      // Create normalized email maps for fast lookup
+      const normalizeEmail = (email: string) => email.toLowerCase().trim();
+      
+      // Create influencer email map
+      const influencerEmailMap = new Map();
+      influencers.forEach(influencer => {
+        const normalizedEmail = normalizeEmail(influencer.email);
+        influencerEmailMap.set(normalizedEmail, influencer);
+      });
 
-      // Create sets of unique emails for comparison
-      const influencerEmails = new Set(influencers.map(inf => inf.email.toLowerCase().trim()));
-      const customerEmails = new Set(customerOrders.map(order => order.customer_email.toLowerCase().trim()));
-
-      console.log(`Unique influencer emails: ${influencerEmails.size}`);
-      console.log(`Unique customer emails: ${customerEmails.size}`);
-
-      // Find overlapping emails
-      const matchingEmails = [...influencerEmails].filter(email => customerEmails.has(email));
-      console.log(`Found ${matchingEmails.length} matching emails:`, matchingEmails.slice(0, 10));
-
-      // Create a map of email to total spent (normalized emails)
-      const emailSpendingMap = new Map<string, { totalSpent: number, customerName: string | null, orderIds: string[] }>();
-
+      // Create customer spending map (aggregate by email)
+      const customerSpendingMap = new Map();
       customerOrders.forEach(order => {
-        const email = order.customer_email.toLowerCase().trim();
-        const existing = emailSpendingMap.get(email);
+        const normalizedEmail = normalizeEmail(order.customer_email);
         
-        if (existing) {
+        if (customerSpendingMap.has(normalizedEmail)) {
+          const existing = customerSpendingMap.get(normalizedEmail);
           existing.totalSpent += Number(order.order_total);
+          existing.orderCount += 1;
           existing.orderIds.push(order.id);
         } else {
-          emailSpendingMap.set(email, {
-            totalSpent: Number(order.order_total),
+          customerSpendingMap.set(normalizedEmail, {
+            email: order.customer_email, // Keep original case
             customerName: order.customer_name,
+            totalSpent: Number(order.order_total),
+            orderCount: 1,
             orderIds: [order.id]
           });
         }
       });
 
-      console.log(`Created spending map for ${emailSpendingMap.size} unique customer emails`);
+      console.log(`Created influencer email map: ${influencerEmailMap.size} unique emails`);
+      console.log(`Created customer spending map: ${customerSpendingMap.size} unique emails`);
 
-      // Find matches and prepare analysis records with detailed logging
+      // Find matches and create analysis records
       const analysisRecords = [];
       let matchCount = 0;
-      let unmatchedInfluencers = [];
 
-      for (const influencer of influencers) {
-        const influencerEmail = influencer.email.toLowerCase().trim();
-        const customerData = emailSpendingMap.get(influencerEmail);
+      // Iterate through customer emails to find matches with influencers
+      for (const [normalizedEmail, customerData] of customerSpendingMap) {
+        const influencer = influencerEmailMap.get(normalizedEmail);
         
-        if (customerData) {
+        if (influencer) {
           matchCount++;
-          console.log(`MATCH FOUND: ${influencer.email} -> ${customerData.totalSpent} spent across ${customerData.orderIds.length} orders`);
+          console.log(`MATCH #${matchCount}: ${customerData.email} -> $${customerData.totalSpent} (${customerData.orderCount} orders)`);
           
-          // Create one record per order for this influencer-customer match
-          for (const orderId of customerData.orderIds) {
-            analysisRecords.push({
-              user_id: user.id,
-              influencer_id: influencer.id,
-              customer_email: influencerEmail,
-              customer_name: customerData.customerName,
-              total_spent: customerData.totalSpent,
-              customer_order_id: orderId,
-              shopify_client_id: null
-            });
-          }
-        } else {
-          unmatchedInfluencers.push(influencer.email);
+          // Create ONE analysis record per matched email with aggregated spending
+          analysisRecords.push({
+            user_id: user.id,
+            influencer_id: influencer.id,
+            customer_email: customerData.email,
+            customer_name: customerData.customerName,
+            total_spent: customerData.totalSpent,
+            customer_order_id: customerData.orderIds[0], // Use first order ID as reference
+            shopify_client_id: null
+          });
         }
       }
 
-      console.log(`=== MATCHING SUMMARY ===`);
+      console.log(`=== MATCHING RESULTS ===`);
       console.log(`Total influencers: ${influencers.length}`);
       console.log(`Total customer orders: ${customerOrders.length}`);
-      console.log(`Unique influencer emails: ${influencerEmails.size}`);
-      console.log(`Unique customer emails: ${customerEmails.size}`);
+      console.log(`Unique customer emails: ${customerSpendingMap.size}`);
       console.log(`Email matches found: ${matchCount}`);
       console.log(`Analysis records to create: ${analysisRecords.length}`);
-      console.log(`First 10 unmatched influencer emails:`, unmatchedInfluencers.slice(0, 10));
 
       if (analysisRecords.length === 0) {
         toast.warning('No matching emails found between influencers and customer orders');
-        console.log('=== NO MATCHES - DETAILED DEBUG ===');
-        console.log('Influencer emails (first 20):', Array.from(influencerEmails).slice(0, 20));
-        console.log('Customer emails (first 20):', Array.from(customerEmails).slice(0, 20));
         return;
       }
 
@@ -165,7 +142,7 @@ const PopulateInfluencerAnalysisButton = () => {
       }
 
       // Insert new analysis records in batches
-      const batchSize = 100;
+      const batchSize = 1000; // Increased batch size for efficiency
       let insertedCount = 0;
 
       for (let i = 0; i < analysisRecords.length; i += batchSize) {
@@ -184,7 +161,7 @@ const PopulateInfluencerAnalysisButton = () => {
         console.log(`Inserted batch ${Math.floor(i / batchSize) + 1}, total records: ${insertedCount}`);
       }
 
-      console.log(`=== FINAL RESULTS ===`);
+      console.log(`=== SUCCESS ===`);
       console.log(`Successfully populated ${insertedCount} analysis records from ${matchCount} email matches`);
       toast.success(`Successfully created ${insertedCount} analysis records from ${matchCount} matching emails`);
       
