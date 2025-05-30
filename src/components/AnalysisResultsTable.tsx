@@ -26,12 +26,14 @@ interface AnalysisResultsTableProps {
 const AnalysisResultsTable: React.FC<AnalysisResultsTableProps> = ({ analysisResults }) => {
   const influencersWithOrders = analysisResults.filter(result => result.total_spent > 0);
 
+  console.log(`Analysis results: ${analysisResults.length} total, ${influencersWithOrders.length} with orders`);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Analysis Results</CardTitle>
         <CardDescription>
-          Influencer spending breakdown (showing only influencers with orders)
+          Showing all {influencersWithOrders.length} influencers with orders (from {analysisResults.length} total analyzed)
         </CardDescription>
       </CardHeader>
       <CardContent>

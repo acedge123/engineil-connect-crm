@@ -30,30 +30,6 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
     
     console.log('CSV Headers found:', headers);
 
-    // Map the Shopify customer CSV headers based on the format provided
-    const headerMap: { [key: string]: string } = {
-      'customer id': 'customer_id',
-      'first name': 'first_name', 
-      'last name': 'last_name',
-      'email': 'email',
-      'accepts email marketing': 'accepts_email_marketing',
-      'default address company': 'company',
-      'default address address1': 'address1',
-      'default address address2': 'address2', 
-      'default address city': 'city',
-      'default address province code': 'province_code',
-      'default address country code': 'country_code',
-      'default address zip': 'zip',
-      'default address phone': 'default_phone',
-      'phone': 'phone',
-      'accepts sms marketing': 'accepts_sms_marketing',
-      'total spent': 'total_spent',
-      'total orders': 'total_orders',
-      'note': 'note',
-      'tax exempt': 'tax_exempt',
-      'tags': 'tags'
-    };
-
     // Check if we have required Shopify headers
     const requiredShopifyHeaders = ['email'];
     const hasRequiredHeaders = requiredShopifyHeaders.some(header => 
@@ -97,10 +73,17 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
               customerData.order_id = value;
               break;
             case 'total spent':
-              // Parse the total spent value, removing any currency symbols
-              const totalSpent = parseFloat(value.replace(/[$,]/g, ''));
-              if (!isNaN(totalSpent)) {
+              // Parse the total spent value, removing any currency symbols and handling edge cases
+              const cleanValue = value.replace(/[$,]/g, '').trim();
+              const totalSpent = parseFloat(cleanValue);
+              
+              // Validate that it's a reasonable monetary amount (less than $100,000)
+              if (!isNaN(totalSpent) && totalSpent >= 0 && totalSpent < 100000) {
                 customerData.order_total = totalSpent;
+                console.log(`Parsed total spent for ${customerData.customer_email}: $${totalSpent}`);
+              } else {
+                console.log(`Invalid total spent value for ${customerData.customer_email}: ${value} -> ${totalSpent}, defaulting to 0`);
+                customerData.order_total = 0;
               }
               break;
           }
@@ -120,7 +103,7 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
         }
         
         // Default to 0 if no total spent found
-        if (!customerData.order_total) {
+        if (customerData.order_total === undefined) {
           customerData.order_total = 0;
         }
         
