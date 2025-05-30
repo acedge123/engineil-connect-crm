@@ -1,4 +1,3 @@
-
 export type ParsedCustomerData = {
   customer_email: string;
   customer_name?: string;
@@ -25,12 +24,21 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
       };
     }
 
-    // Parse the header line - handle both quoted and unquoted CSV
-    const headers = lines[0].split('\t').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    // Parse the header line - handle both quoted and unquoted CSV, including tab-separated
+    const headerLine = lines[0];
+    let headers: string[];
+    
+    // Check if it's tab-separated (Shopify export format)
+    if (headerLine.includes('\t')) {
+      headers = headerLine.split('\t').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    } else {
+      // Handle comma-separated with potential quoted values
+      headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    }
     
     console.log('CSV Headers found:', headers);
 
-    // Check if we have required Shopify headers
+    // Check for Shopify customer export headers
     const requiredShopifyHeaders = ['email'];
     const hasRequiredHeaders = requiredShopifyHeaders.some(header => 
       headers.includes(header.toLowerCase())
@@ -47,8 +55,16 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
     const parsedData: ParsedCustomerData[] = [];
     
     for (let i = 1; i < lines.length; i++) {
-      // Handle tab-separated values (Shopify format)
-      const values = lines[i].split('\t').map(v => v.trim().replace(/['"]/g, ''));
+      const line = lines[i].trim();
+      if (!line) continue; // Skip empty lines
+      
+      // Handle both tab-separated and comma-separated values
+      let values: string[];
+      if (headerLine.includes('\t')) {
+        values = line.split('\t').map(v => v.trim().replace(/^["']|["']$/g, ''));
+      } else {
+        values = line.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+      }
       
       let customerData: Partial<ParsedCustomerData> = {};
       let firstName = '';
@@ -61,33 +77,32 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
         if (value && value.trim()) {
           switch (normalizedHeader) {
             case 'email':
-              customerData.customer_email = value;
+              customerData.customer_email = value.trim();
               break;
             case 'first name':
-              firstName = value;
+              firstName = value.trim();
               break;
             case 'last name':
-              lastName = value;
+              lastName = value.trim();
               break;
             case 'customer id':
-              customerData.order_id = value;
+              // Use Customer ID as the order ID since this is customer data, not order data
+              customerData.order_id = value.trim();
               break;
             case 'total spent':
               // Parse the total spent value, removing any currency symbols
               const cleanValue = value.replace(/[$,]/g, '').trim();
               const totalSpent = parseFloat(cleanValue);
               
-              // Special case for Alison Grayson - check email first
-              if (customerData.customer_email && customerData.customer_email.toLowerCase() === 'alison.grayson@gmail.com') {
-                customerData.order_total = 257;
-                console.log(`Special case: Setting Alison Grayson's total spent to $257`);
-              } else if (!isNaN(totalSpent) && totalSpent >= 0 && totalSpent < 100000) {
+              if (!isNaN(totalSpent) && totalSpent >= 0 && totalSpent < 1000000) {
                 customerData.order_total = totalSpent;
-                console.log(`Parsed total spent for ${customerData.customer_email}: $${totalSpent}`);
               } else {
                 console.log(`Invalid total spent value for ${customerData.customer_email}: ${value} -> ${totalSpent}, defaulting to 0`);
                 customerData.order_total = 0;
               }
+              break;
+            case 'total orders':
+              // We could use this for validation but we'll keep it simple for now
               break;
           }
         }
@@ -99,16 +114,10 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
       }
 
       // Create the customer record if we have the required email
-      if (customerData.customer_email) {
-        // Apply special case for Alison Grayson after email is set
-        if (customerData.customer_email.toLowerCase() === 'alison.grayson@gmail.com') {
-          customerData.order_total = 257;
-          console.log(`Applied special case: Alison Grayson total spent set to $257`);
-        }
-        
-        // Use customer ID as order ID, or generate one
+      if (customerData.customer_email && customerData.customer_email.trim()) {
+        // Generate a unique order ID if we don't have a customer ID
         if (!customerData.order_id) {
-          customerData.order_id = `CUST-${Date.now()}-${i}`;
+          customerData.order_id = `CUSTOMER-${Date.now()}-${i}`;
         }
         
         // Default to 0 if no total spent found
@@ -116,11 +125,12 @@ export const parseShopifyCustomerCSV = (csvContent: string): CSVParseResult => {
           customerData.order_total = 0;
         }
         
-        // Don't set a default order date - leave it empty for customer data
-        // This prevents misleading date ranges in the analysis
+        // Set empty order date since this is customer lifetime data, not specific orders
         customerData.order_date = '';
         
         parsedData.push(customerData as ParsedCustomerData);
+        
+        console.log(`Parsed customer: ${customerData.customer_email} - $${customerData.order_total}`);
       }
     }
 

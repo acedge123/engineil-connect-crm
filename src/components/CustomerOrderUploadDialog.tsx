@@ -33,13 +33,24 @@ const CustomerOrderUploadDialog: React.FC<CustomerOrderUploadDialogProps> = ({
           Upload Shopify Customer CSV
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Upload Shopify Customer CSV</DialogTitle>
-          <DialogDescription>
-            Upload a CSV file with Shopify customer data. Required column: Email. 
-            Optional columns: First Name, Last Name, Customer ID, Total Spent, Total Orders.
-            The system will automatically map Shopify column headers.
+          <DialogDescription className="space-y-2">
+            <p>Upload a CSV file exported from Shopify's customer database.</p>
+            <div className="bg-blue-50 p-3 rounded-md text-sm">
+              <p className="font-medium text-blue-800 mb-1">Expected columns:</p>
+              <ul className="text-blue-700 space-y-0.5">
+                <li>• <strong>Email</strong> (required)</li>
+                <li>• First Name, Last Name</li>
+                <li>• Customer ID</li>
+                <li>• Total Spent</li>
+                <li>• Total Orders</li>
+              </ul>
+            </div>
+            <p className="text-xs text-gray-600">
+              The system will automatically map Shopify export column headers.
+            </p>
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
