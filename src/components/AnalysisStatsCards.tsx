@@ -2,22 +2,7 @@
 import React from 'react';
 import { DollarSign, Users, TrendingUp, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-type InfluencerSpendingResult = {
-  influencer_id: string;
-  customer_email: string;
-  customer_name?: string;
-  total_spent: number;
-  order_count: number;
-  first_order_date: string;
-  last_order_date: string;
-  average_order_value: number;
-  influencer?: {
-    name?: string;
-    instagram_handle?: string;
-    category?: string;
-  };
-};
+import { InfluencerSpendingResult } from '@/hooks/useInfluencerAnalysis';
 
 interface AnalysisStatsCardsProps {
   analysisResults: InfluencerSpendingResult[];

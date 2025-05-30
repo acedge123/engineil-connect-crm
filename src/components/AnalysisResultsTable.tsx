@@ -2,22 +2,7 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-
-type InfluencerSpendingResult = {
-  influencer_id: string;
-  customer_email: string;
-  customer_name?: string;
-  total_spent: number;
-  order_count: number;
-  first_order_date: string;
-  last_order_date: string;
-  average_order_value: number;
-  influencer?: {
-    name?: string;
-    instagram_handle?: string;
-    category?: string;
-  };
-};
+import { InfluencerSpendingResult } from '@/hooks/useInfluencerAnalysis';
 
 interface AnalysisResultsTableProps {
   analysisResults: InfluencerSpendingResult[];

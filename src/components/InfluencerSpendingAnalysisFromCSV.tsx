@@ -1,368 +1,46 @@
 
 import React, { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { BarChart3 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { toast } from 'sonner';
 import CustomerOrdersUpload from './CustomerOrdersUpload';
-import AnalysisStatsCards from './AnalysisStatsCards';
-import AnalysisResultsTable from './AnalysisResultsTable';
-import ClientSelector from './ClientSelector';
-import AnalysisControls from './AnalysisControls';
-
-type CustomerOrder = {
-  id: string;
-  user_id: string;
-  customer_email: string;
-  customer_name?: string;
-  order_id: string;
-  order_total: number;
-  order_date: string;
-  shopify_client_id?: string;
-  created_at: string;
-};
-
-type InfluencerSpendingResult = {
-  influencer_id: string;
-  customer_email: string;
-  customer_name?: string;
-  total_spent: number;
-  order_count: number;
-  first_order_date: string;
-  last_order_date: string;
-  average_order_value: number;
-  influencer?: {
-    name?: string;
-    instagram_handle?: string;
-    category?: string;
-  };
-};
-
-type ShopifyClient = {
-  id: string;
-  client_name: string;
-  shopify_url: string;
-};
-
-type Influencer = {
-  id: string;
-  email: string;
-  name?: string;
-  instagram_handle?: string;
-  category?: string;
-};
+import InfluencerAnalysisSection from './InfluencerAnalysisSection';
+import { useAnalysisData } from '@/hooks/useAnalysisData';
+import { useInfluencerAnalysis } from '@/hooks/useInfluencerAnalysis';
 
 const InfluencerSpendingAnalysisFromCSV = () => {
-  const { user } = useAuth();
-  const [analysisResults, setAnalysisResults] = useState<InfluencerSpendingResult[]>([]);
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
+  
+  const { 
+    shopifyClients, 
+    customerOrders, 
+    influencers, 
+    ordersLoading 
+  } = useAnalysisData(selectedShopifyClient);
 
-  // Fetch Shopify clients with explicit typing
-  const shopifyClientsQuery = useQuery<ShopifyClient[]>({
-    queryKey: ['shopify-clients'],
-    queryFn: async () => {
-      if (!user) throw new Error('User not authenticated');
-      
-      const { data, error } = await supabase
-        .from('shopify_clients')
-        .select('id, client_name, shopify_url')
-        .eq('user_id', user.id)
-        .order('client_name');
+  const { 
+    analysisResults, 
+    isAnalyzing, 
+    handleAnalyze 
+  } = useInfluencerAnalysis(selectedShopifyClient, shopifyClients);
 
-      if (error) throw error;
-      return data as ShopifyClient[];
-    },
-    enabled: !!user,
-  });
-
-  const shopifyClients = shopifyClientsQuery.data;
-
-  // Fetch customer orders with explicit typing
-  const customerOrdersQuery = useQuery<CustomerOrder[]>({
-    queryKey: ['customer-orders', selectedShopifyClient],
-    queryFn: async () => {
-      if (!user) throw new Error('User not authenticated');
-      
-      console.log('Fetching customer orders for analysis...');
-      
-      let query = supabase
-        .from('customer_orders')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('order_date', { ascending: false });
-
-      if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-        query = query.eq('shopify_client_id', selectedShopifyClient);
-      } else {
-        query = query.is('shopify_client_id', null);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      
-      console.log(`Fetched ${data?.length || 0} customer orders for analysis`);
-      return data as CustomerOrder[];
-    },
-    enabled: !!user,
-  });
-
-  const customerOrders = customerOrdersQuery.data;
-  const ordersLoading = customerOrdersQuery.isLoading;
-
-  // Fetch ALL influencers without any limits (same logic as useInfluencers hook)
-  const influencersQuery = useQuery<Influencer[]>({
-    queryKey: ['influencers-for-analysis'],
-    queryFn: async () => {
-      if (!user) throw new Error('User not authenticated');
-      
-      console.log('Fetching ALL influencers for analysis...');
-      
-      // Fetch ALL influencers without any limits using the same batching logic
-      let allInfluencers: Influencer[] = [];
-      let from = 0;
-      const batchSize = 1000; // Fetch in batches to avoid memory issues
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error, count } = await supabase
-          .from('influencers')
-          .select('*', { count: 'exact' })
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .range(from, from + batchSize - 1);
-
-        if (error) {
-          console.error('Error fetching influencers for analysis:', error);
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          allInfluencers = [...allInfluencers, ...data];
-          from += batchSize;
-          
-          // Check if we've fetched all records
-          hasMore = data.length === batchSize;
-          
-          console.log(`Fetched batch: ${data.length} influencers for analysis (total so far: ${allInfluencers.length})`);
-          if (count !== null) {
-            console.log(`Database total count for analysis: ${count}`);
-          }
-        } else {
-          hasMore = false;
-        }
-      }
-      
-      console.log(`Successfully fetched ALL ${allInfluencers.length} influencers for analysis`);
-      
-      return allInfluencers;
-    },
-    enabled: !!user,
-  });
-
-  const influencers = influencersQuery.data;
-
-  // Analyze spending mutation with explicit typing
-  const analyzeSpendingMutation = useMutation<InfluencerSpendingResult[], Error>({
-    mutationFn: async () => {
-      if (!user || !customerOrders || !influencers) {
-        throw new Error('Missing required data for analysis');
-      }
-
-      console.log(`Starting analysis with ${influencers.length} influencers and ${customerOrders.length} customer orders`);
-
-      // Create email map for faster lookups
-      const ordersByEmail = new Map<string, CustomerOrder[]>();
-      
-      customerOrders.forEach(order => {
-        const normalizedEmail = order.customer_email.toLowerCase().trim();
-        if (!ordersByEmail.has(normalizedEmail)) {
-          ordersByEmail.set(normalizedEmail, []);
-        }
-        ordersByEmail.get(normalizedEmail)!.push(order);
-      });
-
-      const clientName = selectedShopifyClient 
-        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
-        : 'Default';
-
-      console.log(`Analyzing ${influencers.length} influencers against ${customerOrders.length} orders for client: ${clientName}`);
-      console.log(`Created order lookup map with ${ordersByEmail.size} unique customer emails`);
-
-      const results: InfluencerSpendingResult[] = [];
-      let matchedInfluencers = 0;
-
-      for (const influencer of influencers) {
-        const normalizedInfluencerEmail = influencer.email.toLowerCase().trim();
-        const influencerOrders = ordersByEmail.get(normalizedInfluencerEmail) || [];
-
-        if (influencerOrders.length > 0) {
-          matchedInfluencers++;
-          const totalSpent = influencerOrders.reduce((sum, order) => sum + order.order_total, 0);
-          const orderCount = influencerOrders.length;
-          const averageOrderValue = totalSpent / orderCount;
-
-          // Get date range
-          const orderDates = influencerOrders.map(order => new Date(order.order_date));
-          const firstOrderDate = new Date(Math.min(...orderDates.map(d => d.getTime())));
-          const lastOrderDate = new Date(Math.max(...orderDates.map(d => d.getTime())));
-
-          // Get customer name from orders
-          const customerName = influencerOrders.find(order => order.customer_name)?.customer_name;
-
-          console.log(`Matched influencer ${influencer.email}: $${totalSpent.toFixed(2)} across ${orderCount} orders`);
-
-          results.push({
-            influencer_id: influencer.id,
-            customer_email: influencer.email,
-            customer_name: customerName,
-            total_spent: totalSpent,
-            order_count: orderCount,
-            first_order_date: firstOrderDate.toISOString(),
-            last_order_date: lastOrderDate.toISOString(),
-            average_order_value: averageOrderValue,
-            influencer: {
-              name: influencer.name,
-              instagram_handle: influencer.instagram_handle,
-              category: influencer.category,
-            },
-          });
-        } else {
-          // Include influencers with no orders
-          results.push({
-            influencer_id: influencer.id,
-            customer_email: influencer.email,
-            customer_name: null,
-            total_spent: 0,
-            order_count: 0,
-            first_order_date: '',
-            last_order_date: '',
-            average_order_value: 0,
-            influencer: {
-              name: influencer.name,
-              instagram_handle: influencer.instagram_handle,
-              category: influencer.category,
-            },
-          });
-        }
-      }
-
-      console.log(`Analysis complete: ${matchedInfluencers} out of ${influencers.length} influencers had orders`);
-
-      // Save results to database
-      const analysisData = results.map(result => ({
-        user_id: user.id,
-        influencer_id: result.influencer_id,
-        customer_email: result.customer_email,
-        customer_name: result.customer_name,
-        total_spent: result.total_spent,
-        order_count: result.order_count,
-        first_order_date: result.first_order_date || null,
-        last_order_date: result.last_order_date || null,
-        average_order_value: result.average_order_value,
-        shopify_client_id: selectedShopifyClient === 'default' ? null : selectedShopifyClient,
-        analysis_date: new Date().toISOString(),
-      }));
-
-      // Delete previous analysis for this client
-      let deleteQuery = supabase
-        .from('influencer_spending_analysis')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (selectedShopifyClient && selectedShopifyClient !== 'default') {
-        deleteQuery = deleteQuery.eq('shopify_client_id', selectedShopifyClient);
-      } else {
-        deleteQuery = deleteQuery.is('shopify_client_id', null);
-      }
-
-      await deleteQuery;
-
-      // Insert new analysis
-      const { data, error } = await supabase
-        .from('influencer_spending_analysis')
-        .insert(analysisData)
-        .select();
-
-      if (error) throw error;
-
-      return results;
-    },
-    onSuccess: (results) => {
-      setAnalysisResults(results);
-      const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
-        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
-        : 'Default';
-      const matchedCount = results.filter(r => r.total_spent > 0).length;
-      toast.success(`Analysis complete for ${clientName}! Analyzed ${results.length} influencers, found ${matchedCount} with orders`);
-    },
-    onError: (error: Error) => {
-      toast.error(`Analysis failed: ${error.message}`);
-    },
-  });
-
-  const handleAnalyze = () => {
-    if (!customerOrders || customerOrders.length === 0) {
-      const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
-        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'selected client'
-        : 'default client';
-      toast.error(`Please upload customer orders data for ${clientName} first`);
-      return;
+  const onAnalyze = () => {
+    if (customerOrders && influencers) {
+      handleAnalyze(customerOrders, influencers);
     }
-    if (!influencers || influencers.length === 0) {
-      toast.error('No influencers found. Please add influencers first');
-      return;
-    }
-    
-    console.log(`Starting analysis with ${influencers.length} total influencers`);
-    analyzeSpendingMutation.mutate();
   };
 
   return (
     <div className="space-y-6">
       <CustomerOrdersUpload />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            Influencer Spending Analysis
-          </CardTitle>
-          <CardDescription>
-            Analyze influencer spending patterns based on uploaded customer order data.
-            {influencers && influencers.length > 0 && (
-              <span className="block mt-1 text-sm font-medium text-blue-600">
-                Ready to analyze {influencers.length} influencers
-              </span>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ClientSelector
-            selectedShopifyClient={selectedShopifyClient}
-            onValueChange={setSelectedShopifyClient}
-            shopifyClients={shopifyClients}
-          />
-
-          <AnalysisControls
-            onAnalyze={handleAnalyze}
-            isAnalyzing={analyzeSpendingMutation.isPending}
-            isOrdersLoading={ordersLoading}
-            analysisResults={analysisResults}
-            selectedShopifyClient={selectedShopifyClient}
-            shopifyClients={shopifyClients}
-          />
-
-          {analysisResults.length > 0 && (
-            <>
-              <AnalysisStatsCards analysisResults={analysisResults} />
-              <AnalysisResultsTable analysisResults={analysisResults} />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <InfluencerAnalysisSection
+        selectedShopifyClient={selectedShopifyClient}
+        onShopifyClientChange={setSelectedShopifyClient}
+        shopifyClients={shopifyClients}
+        onAnalyze={onAnalyze}
+        isAnalyzing={isAnalyzing}
+        isOrdersLoading={ordersLoading}
+        analysisResults={analysisResults}
+        influencersCount={influencers?.length}
+      />
     </div>
   );
 };

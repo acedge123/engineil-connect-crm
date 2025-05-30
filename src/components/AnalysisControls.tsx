@@ -3,22 +3,7 @@ import React from 'react';
 import { Play, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-
-type InfluencerSpendingResult = {
-  influencer_id: string;
-  customer_email: string;
-  customer_name?: string;
-  total_spent: number;
-  order_count: number;
-  first_order_date: string;
-  last_order_date: string;
-  average_order_value: number;
-  influencer?: {
-    name?: string;
-    instagram_handle?: string;
-    category?: string;
-  };
-};
+import { InfluencerSpendingResult } from '@/hooks/useInfluencerAnalysis';
 
 type ShopifyClient = {
   id: string;
