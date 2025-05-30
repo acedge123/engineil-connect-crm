@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,6 +34,7 @@ const CustomerOrdersUpload = () => {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
+  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch Shopify clients
   const shopifyClientsQuery = useQuery({
@@ -55,8 +56,7 @@ const CustomerOrdersUpload = () => {
 
   const shopifyClients = shopifyClientsQuery.data;
 
-  // Define mutation function separately to avoid type inference issues
-  const uploadCsvFile = async (file: File): Promise<CustomerOrderInsert[]> => {
+  const uploadCsvFile = async (file: File): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
 
     const text = await file.text();
@@ -161,32 +161,32 @@ const CustomerOrdersUpload = () => {
       .select();
 
     if (error) throw error;
-    return data as CustomerOrderInsert[];
+    
+    // Invalidate queries and show success
+    queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
+    setIsUploadDialogOpen(false);
+    setCsvFile(null);
+    const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
+      ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
+      : 'Default';
+    toast.success(`Successfully uploaded ${data.length} customer records for ${clientName}`);
   };
 
-  // Simplified CSV upload mutation with explicit typing
-  const uploadCsvMutation = useMutation<CustomerOrderInsert[], Error, File>({
-    mutationFn: uploadCsvFile,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
-      setIsUploadDialogOpen(false);
-      setCsvFile(null);
-      const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
-        ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
-        : 'Default';
-      toast.success(`Successfully uploaded ${data.length} customer records for ${clientName}`);
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to upload CSV: ${error.message}`);
-    },
-  });
-
-  const handleCsvUpload = () => {
+  const handleCsvUpload = async () => {
     if (!csvFile) {
       toast.error('Please select a CSV file');
       return;
     }
-    uploadCsvMutation.mutate(csvFile);
+
+    setIsUploading(true);
+    try {
+      await uploadCsvFile(csvFile);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error(`Failed to upload CSV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -240,10 +240,10 @@ const CustomerOrdersUpload = () => {
               </Button>
               <Button 
                 onClick={handleCsvUpload}
-                disabled={!csvFile || uploadCsvMutation.isPending}
+                disabled={!csvFile || isUploading}
                 className="bg-crm-blue hover:bg-blue-600"
               >
-                {uploadCsvMutation.isPending ? 'Uploading...' : 'Upload'}
+                {isUploading ? 'Uploading...' : 'Upload'}
               </Button>
             </DialogFooter>
           </DialogContent>
