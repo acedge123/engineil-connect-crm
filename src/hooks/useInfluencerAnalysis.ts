@@ -97,10 +97,20 @@ export const useInfluencerAnalysis = (
           const orderCount = influencerOrders.length;
           const averageOrderValue = totalSpent / orderCount;
 
-          // Get date range
-          const orderDates = influencerOrders.map(order => new Date(order.order_date));
-          const firstOrderDate = new Date(Math.min(...orderDates.map(d => d.getTime())));
-          const lastOrderDate = new Date(Math.max(...orderDates.map(d => d.getTime())));
+          // Get date range - only from orders with valid dates
+          const validOrderDates = influencerOrders
+            .filter(order => order.order_date && order.order_date.trim() !== '')
+            .map(order => new Date(order.order_date));
+          
+          let firstOrderDate = '';
+          let lastOrderDate = '';
+          
+          if (validOrderDates.length > 0) {
+            const firstDate = new Date(Math.min(...validOrderDates.map(d => d.getTime())));
+            const lastDate = new Date(Math.max(...validOrderDates.map(d => d.getTime())));
+            firstOrderDate = firstDate.toISOString();
+            lastOrderDate = lastDate.toISOString();
+          }
 
           // Get customer name from orders
           const customerName = influencerOrders.find(order => order.customer_name)?.customer_name;
@@ -113,8 +123,8 @@ export const useInfluencerAnalysis = (
             customer_name: customerName,
             total_spent: totalSpent,
             order_count: orderCount,
-            first_order_date: firstOrderDate.toISOString(),
-            last_order_date: lastOrderDate.toISOString(),
+            first_order_date: firstOrderDate,
+            last_order_date: lastOrderDate,
             average_order_value: averageOrderValue,
             influencer: {
               name: influencer.name,

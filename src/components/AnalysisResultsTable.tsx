@@ -54,7 +54,7 @@ const AnalysisResultsTable: React.FC<AnalysisResultsTableProps> = ({ analysisRes
                     ${result.average_order_value.toFixed(2)}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {result.first_order_date && result.last_order_date ? (
+                    {result.first_order_date && result.last_order_date && result.first_order_date.trim() !== '' ? (
                       <>
                         {new Date(result.first_order_date).toLocaleDateString()}
                         {result.first_order_date !== result.last_order_date && (
