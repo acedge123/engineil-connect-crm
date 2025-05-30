@@ -85,6 +85,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
       
+      console.log('Fetching customer orders for analysis...');
+      
       let query = supabase
         .from('customer_orders')
         .select('*')
@@ -100,6 +102,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       const { data, error } = await query;
 
       if (error) throw error;
+      
+      console.log(`Fetched ${data?.length || 0} customer orders for analysis`);
       return data as CustomerOrder[];
     },
     enabled: !!user,
@@ -108,18 +112,28 @@ const InfluencerSpendingAnalysisFromCSV = () => {
   const customerOrders = customerOrdersQuery.data;
   const ordersLoading = customerOrdersQuery.isLoading;
 
-  // Fetch influencers with explicit typing
+  // Fetch ALL influencers without any limits
   const influencersQuery = useQuery<Influencer[]>({
-    queryKey: ['influencers'],
+    queryKey: ['influencers-for-analysis'],
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
       
-      const { data, error } = await supabase
+      console.log('Fetching ALL influencers for analysis...');
+      
+      const { data, error, count } = await supabase
         .from('influencers')
-        .select('*')
-        .eq('user_id', user.id);
+        .select('*', { count: 'exact' })
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching influencers for analysis:', error);
+        throw error;
+      }
+      
+      console.log(`Fetched ${data?.length || 0} influencers for analysis`);
+      console.log(`Total influencer count: ${count}`);
+      
       return data || [];
     },
     enabled: !!user,
@@ -133,6 +147,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       if (!user || !customerOrders || !influencers) {
         throw new Error('Missing required data for analysis');
       }
+
+      console.log(`Starting analysis with ${influencers.length} influencers and ${customerOrders.length} customer orders`);
 
       // Create email map for faster lookups
       const ordersByEmail = new Map<string, CustomerOrder[]>();
@@ -150,14 +166,17 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         : 'Default';
 
       console.log(`Analyzing ${influencers.length} influencers against ${customerOrders.length} orders for client: ${clientName}`);
+      console.log(`Created order lookup map with ${ordersByEmail.size} unique customer emails`);
 
       const results: InfluencerSpendingResult[] = [];
+      let matchedInfluencers = 0;
 
       for (const influencer of influencers) {
         const normalizedInfluencerEmail = influencer.email.toLowerCase().trim();
         const influencerOrders = ordersByEmail.get(normalizedInfluencerEmail) || [];
 
         if (influencerOrders.length > 0) {
+          matchedInfluencers++;
           const totalSpent = influencerOrders.reduce((sum, order) => sum + order.order_total, 0);
           const orderCount = influencerOrders.length;
           const averageOrderValue = totalSpent / orderCount;
@@ -169,6 +188,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
 
           // Get customer name from orders
           const customerName = influencerOrders.find(order => order.customer_name)?.customer_name;
+
+          console.log(`Matched influencer ${influencer.email}: $${totalSpent.toFixed(2)} across ${orderCount} orders`);
 
           results.push({
             influencer_id: influencer.id,
@@ -204,6 +225,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
           });
         }
       }
+
+      console.log(`Analysis complete: ${matchedInfluencers} out of ${influencers.length} influencers had orders`);
 
       // Save results to database
       const analysisData = results.map(result => ({
@@ -249,7 +272,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       const clientName = selectedShopifyClient && selectedShopifyClient !== 'default'
         ? shopifyClients?.find(c => c.id === selectedShopifyClient)?.client_name || 'Selected Client'
         : 'Default';
-      toast.success(`Analysis complete for ${clientName}! Found ${results.filter(r => r.total_spent > 0).length} influencers with orders`);
+      const matchedCount = results.filter(r => r.total_spent > 0).length;
+      toast.success(`Analysis complete for ${clientName}! Analyzed ${results.length} influencers, found ${matchedCount} with orders`);
     },
     onError: (error: Error) => {
       toast.error(`Analysis failed: ${error.message}`);
@@ -268,6 +292,8 @@ const InfluencerSpendingAnalysisFromCSV = () => {
       toast.error('No influencers found. Please add influencers first');
       return;
     }
+    
+    console.log(`Starting analysis with ${influencers.length} total influencers`);
     analyzeSpendingMutation.mutate();
   };
 
@@ -282,7 +308,12 @@ const InfluencerSpendingAnalysisFromCSV = () => {
             Influencer Spending Analysis
           </CardTitle>
           <CardDescription>
-            Analyze influencer spending patterns based on uploaded customer order data
+            Analyze influencer spending patterns based on uploaded customer order data.
+            {influencers && influencers.length > 0 && (
+              <span className="block mt-1 text-sm font-medium text-blue-600">
+                Ready to analyze {influencers.length} influencers
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
