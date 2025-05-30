@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Users, DollarSign, TrendingUp, Play, Download } from 'lucide-react';
@@ -50,7 +49,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [analysisResults, setAnalysisResults] = useState<InfluencerSpendingResult[]>([]);
-  const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('');
+  const [selectedShopifyClient, setSelectedShopifyClient] = useState<string>('default');
 
   // Fetch Shopify clients
   const { data: shopifyClients } = useQuery({
@@ -82,7 +81,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
         .eq('user_id', user.id)
         .order('order_date', { ascending: false });
 
-      if (selectedShopifyClient) {
+      if (selectedShopifyClient && selectedShopifyClient !== 'default') {
         query = query.eq('shopify_client_id', selectedShopifyClient);
       } else {
         query = query.is('shopify_client_id', null);
@@ -323,7 +322,7 @@ const InfluencerSpendingAnalysisFromCSV = () => {
                 <SelectValue placeholder="Select a Shopify client or leave blank for default" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Default (No specific client)</SelectItem>
+                <SelectItem value="default">Default (No specific client)</SelectItem>
                 {shopifyClients?.map((client) => (
                   <SelectItem key={client.id} value={client.id}>
                     {client.client_name} ({client.shopify_url})
