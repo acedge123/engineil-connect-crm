@@ -16,12 +16,18 @@ export const useCustomerOrderUpload = () => {
     mutationFn: async ({ file, shopifyClientId }: { file: File; shopifyClientId: string }) => {
       if (!user) throw new Error('User not authenticated');
 
+      console.log('=== UPLOAD MUTATION START ===');
+      console.log('Selected shopify client ID:', shopifyClientId);
+
       const text = await file.text();
       const parseResult = parseShopifyCustomerCSV(text);
 
       if (!parseResult.success) {
         throw new Error(parseResult.error);
       }
+
+      console.log('Parsed customer data count:', parseResult.data.length);
+      console.log('Calling customerOrderService.uploadCustomerOrders with shopifyClientId:', shopifyClientId);
 
       return customerOrderService.uploadCustomerOrders(
         user.id,
@@ -35,6 +41,11 @@ export const useCustomerOrderUpload = () => {
       const clientName = variables.shopifyClientId && variables.shopifyClientId !== 'default'
         ? 'Selected Client'
         : 'Default';
+      
+      console.log('=== UPLOAD SUCCESS ===');
+      console.log('Uploaded data count:', data.length);
+      console.log('Client:', clientName);
+      
       toast.success(`Successfully uploaded ${data.length} customer records for ${clientName}`);
     },
     onError: (error: Error) => {
@@ -48,6 +59,10 @@ export const useCustomerOrderUpload = () => {
       toast.error('Please select a CSV file');
       return;
     }
+
+    console.log('=== HANDLE UPLOAD START ===');
+    console.log('File:', csvFile.name);
+    console.log('Shopify Client ID passed to handleUpload:', shopifyClientId);
 
     setIsUploading(true);
     try {
