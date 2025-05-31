@@ -31,20 +31,8 @@ export const useCreatorGifts = () => {
   const { data: gifts, isLoading, error, refetch } = useQuery({
     queryKey: ['creator-gifts'],
     queryFn: async (): Promise<CreatorGift[]> => {
-      console.log('Fetching all creator gifts');
+      console.log('Fetching creator gifts');
       
-      // First, let's check the total count in the table without RLS filtering
-      const { count, error: countError } = await supabase
-        .from('creator_gifts')
-        .select('*', { count: 'exact', head: true });
-      
-      if (countError) {
-        console.error('Error getting count:', countError);
-      } else {
-        console.log('Total creator gifts in database:', count);
-      }
-      
-      // Try to fetch data without any filtering to see if RLS is the issue
       const { data, error } = await supabase
         .from('creator_gifts')
         .select('*')
@@ -52,34 +40,12 @@ export const useCreatorGifts = () => {
 
       if (error) {
         console.error('Error fetching creator gifts:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
         throw error;
       }
 
       console.log('Creator gifts fetched successfully:', data?.length || 0);
-      console.log('Raw data sample:', data?.slice(0, 2));
-      
-      // Let's specifically look for any data
-      if (data && data.length > 0) {
-        console.log('Found creator gifts:', data.map(gift => ({
-          id: gift.id,
-          creator_email: gift.creator_email,
-          brand_name: gift.brand_name,
-          amount: gift.amount
-        })));
-      } else {
-        console.log('No creator gifts found in query result');
-      }
-      
       return data as CreatorGift[];
     },
-    staleTime: 0, // Always fetch fresh data
-    gcTime: 0, // Don't cache the data (updated from cacheTime)
   });
 
   const deleteMutation = useMutation({
@@ -115,14 +81,6 @@ export const useCreatorGifts = () => {
     queryClient.invalidateQueries({ queryKey: ['creator-gifts'] });
     refetch();
   };
-
-  // Add debugging for the returned data
-  console.log('useCreatorGifts hook state:', {
-    isLoading,
-    error: error?.message,
-    giftsCount: gifts?.length || 0,
-    gifts: gifts?.slice(0, 2) // Log first 2 items for debugging
-  });
 
   return {
     gifts: gifts || [],
