@@ -28,10 +28,21 @@ export const useCreatorGifts = () => {
   const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { data: gifts, isLoading, error } = useQuery({
+  const { data: gifts, isLoading, error, refetch } = useQuery({
     queryKey: ['creator-gifts'],
     queryFn: async (): Promise<CreatorGift[]> => {
       console.log('Fetching all creator gifts');
+      
+      // First, let's check the total count in the table
+      const { count, error: countError } = await supabase
+        .from('creator_gifts')
+        .select('*', { count: 'exact', head: true });
+      
+      if (countError) {
+        console.error('Error getting count:', countError);
+      } else {
+        console.log('Total creator gifts in database:', count);
+      }
       
       const { data, error } = await supabase
         .from('creator_gifts')
@@ -44,8 +55,22 @@ export const useCreatorGifts = () => {
       }
 
       console.log('Creator gifts fetched:', data?.length || 0);
+      console.log('Raw data:', data);
+      
+      // Let's specifically look for the UUID you mentioned
+      if (data) {
+        const specificGift = data.find(gift => gift.id === '56f771c2-8929-4e45-beb6-078f2a1c1ae7' || gift.user_id === '56f771c2-8929-4e45-beb6-078f2a1c1ae7');
+        if (specificGift) {
+          console.log('Found specific gift:', specificGift);
+        } else {
+          console.log('Specific gift not found in results');
+        }
+      }
+      
       return data as CreatorGift[];
     },
+    staleTime: 0, // Always fetch fresh data
+    cacheTime: 0, // Don't cache the data
   });
 
   const deleteMutation = useMutation({
@@ -76,11 +101,18 @@ export const useCreatorGifts = () => {
     }
   };
 
+  const manualRefresh = () => {
+    console.log('Manual refresh triggered');
+    queryClient.invalidateQueries({ queryKey: ['creator-gifts'] });
+    refetch();
+  };
+
   return {
     gifts: gifts || [],
     isLoading,
     error,
     handleDelete,
     isDeleting,
+    manualRefresh,
   };
 };
