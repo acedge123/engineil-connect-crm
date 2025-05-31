@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 type CreatorGift = {
@@ -26,21 +25,17 @@ type CreatorGift = {
 };
 
 export const useCreatorGifts = () => {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { data: gifts, isLoading, error } = useQuery({
     queryKey: ['creator-gifts'],
     queryFn: async (): Promise<CreatorGift[]> => {
-      if (!user) throw new Error('User not authenticated');
-      
-      console.log('Fetching creator gifts for user:', user.id);
+      console.log('Fetching all creator gifts');
       
       const { data, error } = await supabase
         .from('creator_gifts')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -51,18 +46,14 @@ export const useCreatorGifts = () => {
       console.log('Creator gifts fetched:', data?.length || 0);
       return data as CreatorGift[];
     },
-    enabled: !!user,
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (!user) throw new Error('User not authenticated');
-      
       const { error } = await supabase
         .from('creator_gifts')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('id', id);
 
       if (error) throw error;
     },
